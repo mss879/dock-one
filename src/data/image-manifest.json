@@ -1,0 +1,257 @@
+{
+  "hero": {
+    "gear": {
+      "height": 1080,
+      "src": "/images/hero/gear.webp",
+      "width": 1920
+    },
+    "laptops": {
+      "height": 1080,
+      "src": "/images/hero/laptops.webp",
+      "width": 1920
+    },
+    "opening": {
+      "height": 1080,
+      "src": "/images/hero/opening.webp",
+      "width": 1920
+    }
+  },
+  "products": {
+    "key-01": {
+      "cutout": {
+        "height": 697,
+        "src": "/images/cutouts/key-01.webp",
+        "width": 1313
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/key-01.webp",
+        "width": 1000
+      }
+    },
+    "key-02": {
+      "cutout": {
+        "height": 671,
+        "src": "/images/cutouts/key-02.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/key-02.webp",
+        "width": 1000
+      }
+    },
+    "key-03": {
+      "cutout": {
+        "height": 674,
+        "src": "/images/cutouts/key-03.webp",
+        "width": 1371
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/key-03.webp",
+        "width": 1000
+      }
+    },
+    "key-04": {
+      "cutout": {
+        "height": 985,
+        "src": "/images/cutouts/key-04.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/key-04.webp",
+        "width": 1000
+      }
+    },
+    "lap-01": {
+      "cutout": {
+        "height": 764,
+        "src": "/images/cutouts/lap-01.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/lap-01.webp",
+        "width": 1000
+      }
+    },
+    "lap-02": {
+      "cutout": {
+        "height": 931,
+        "src": "/images/cutouts/lap-02.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/lap-02.webp",
+        "width": 1000
+      }
+    },
+    "lap-03": {
+      "cutout": {
+        "height": 1065,
+        "src": "/images/cutouts/lap-03.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/lap-03.webp",
+        "width": 1000
+      }
+    },
+    "lap-04": {
+      "cutout": {
+        "height": 1105,
+        "src": "/images/cutouts/lap-04.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/lap-04.webp",
+        "width": 1000
+      }
+    },
+    "mou-01": {
+      "cutout": {
+        "height": 1293,
+        "src": "/images/cutouts/mou-01.webp",
+        "width": 1365
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/mou-01.webp",
+        "width": 1000
+      }
+    },
+    "mou-02": {
+      "cutout": {
+        "height": 1032,
+        "src": "/images/cutouts/mou-02.webp",
+        "width": 1318
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/mou-02.webp",
+        "width": 1000
+      }
+    },
+    "mou-03": {
+      "cutout": {
+        "height": 1178,
+        "src": "/images/cutouts/mou-03.webp",
+        "width": 1228
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/mou-03.webp",
+        "width": 1000
+      }
+    },
+    "mou-04": {
+      "cutout": {
+        "height": 889,
+        "src": "/images/cutouts/mou-04.webp",
+        "width": 1304
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/mou-04.webp",
+        "width": 1000
+      }
+    },
+    "sto-01": {
+      "cutout": {
+        "height": 950,
+        "src": "/images/cutouts/sto-01.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/sto-01.webp",
+        "width": 1000
+      }
+    },
+    "sto-02": {
+      "cutout": {
+        "height": 1001,
+        "src": "/images/cutouts/sto-02.webp",
+        "width": 1400
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/sto-02.webp",
+        "width": 1000
+      }
+    },
+    "sto-03": {
+      "cutout": {
+        "height": 1085,
+        "src": "/images/cutouts/sto-03.webp",
+        "width": 1397
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/sto-03.webp",
+        "width": 1000
+      }
+    },
+    "sto-04": {
+      "cutout": {
+        "height": 1336,
+        "src": "/images/cutouts/sto-04.webp",
+        "width": 778
+      },
+      "tile": {
+        "height": 1000,
+        "src": "/images/products/sto-04.webp",
+        "width": 1000
+      }
+    }
+  },
+  "promo": {
+    "keyboards": {
+      "height": 900,
+      "src": "/images/promo/keyboards.webp",
+      "width": 1600
+    },
+    "laptops": {
+      "height": 1200,
+      "src": "/images/promo/laptops.webp",
+      "width": 1600
+    },
+    "mice": {
+      "height": 900,
+      "src": "/images/promo/mice.webp",
+      "width": 1600
+    },
+    "storage": {
+      "height": 1600,
+      "src": "/images/promo/storage.webp",
+      "width": 1200
+    }
+  },
+  "stages": {
+    "keyboards": {
+      "height": 1000,
+      "src": "/images/stages/keyboards.webp",
+      "width": 1000
+    },
+    "laptops": {
+      "height": 1000,
+      "src": "/images/stages/laptops.webp",
+      "width": 1000
+    },
+    "mice": {
+      "height": 1000,
+      "src": "/images/stages/mice.webp",
+      "width": 1000
+    },
+    "storage": {
+      "height": 1000,
+      "src": "/images/stages/storage.webp",
+      "width": 1000
+    }
+  }
+}

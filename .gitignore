@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# raw AI generations (large PNGs) — processed WebP lives in public/images
+/scripts/images/raw/

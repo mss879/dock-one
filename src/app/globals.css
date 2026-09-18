@@ -1,26 +1,221 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Tokens — see DESIGN.md §3–4 */
+@theme {
+  --color-paper: #f3f3f1;
+  --color-surface: #ffffff;
+  --color-surface-2: #e9e9e6;
+  --color-ink: #0b0b0c;
+  --color-ink-2: #3a3a40;
+  --color-mute: #63636b;
+  --color-line: #d8d8d4;
+  --color-violet: #6d3bff;
+  --color-violet-ink: #4f22d9;
+  --color-violet-soft: #ebe5ff;
+  --color-lime: #d4ff3a;
+  --color-lime-soft: #f0ffc0;
+  --color-night: #0b0b0c;
+  --color-night-2: #151517;
+  --color-night-line: #2b2b30;
+  --color-night-mute: #a1a1aa;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --ease-brut: cubic-bezier(0.2, 0, 0, 1);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --animate-ticker: ticker 40s linear infinite;
+  --animate-blink: blink 1.1s steps(2, start) infinite;
+  --animate-toast-in: toast-in 0.3s var(--ease-brut) both;
+  --animate-pop: pop 0.4s var(--ease-brut);
+
+  @keyframes ticker {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes blink {
+    to {
+      visibility: hidden;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @keyframes pop {
+    40% {
+      transform: scale(1.18);
+    }
+  }
+  @keyframes hero-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --font-display: var(--font-anton), "Arial Narrow", Impact, sans-serif;
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  html:has(dialog[open]) {
+    overflow: hidden;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-violet);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-lime);
+    color: var(--color-ink);
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Page container + gutters */
+@utility shell {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  @media (width >= 40rem) {
+    padding-inline: 24px;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 32px;
+  }
+}
+
+/* Mono uppercase label */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Display type */
+@utility display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 0.92;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+}
+
+/* Chamfered corners: top-right + bottom-left. Size via --chamfer. */
+@utility clip-chamfer {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chamfer, 16px)) 0,
+    100% var(--chamfer, 16px),
+    100% 100%,
+    var(--chamfer, 16px) 100%,
+    0 calc(100% - var(--chamfer, 16px))
+  );
+}
+
+/* Square blueprint grid. Colour via --grid-line, cell via --grid-size. */
+@utility bg-grid {
+  background-image:
+    linear-gradient(var(--grid-line, rgb(11 11 12 / 0.06)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line, rgb(11 11 12 / 0.06)) 1px, transparent 1px);
+  background-size: var(--grid-size, 32px) var(--grid-size, 32px);
+}
+
+/* Diagonal hatch fill */
+@utility bg-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--hatch-line, rgb(11 11 12 / 0.22)) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* Native <dialog> side sheets (basket, mobile menu) */
+.sheet {
+  transform: translateX(100%);
+  transition:
+    transform 0.32s var(--ease-brut),
+    overlay 0.32s allow-discrete,
+    display 0.32s allow-discrete;
+}
+.sheet[data-side="left"] {
+  transform: translateX(-100%);
+}
+.sheet[open] {
+  transform: translateX(0);
+}
+@starting-style {
+  .sheet[open] {
+    transform: translateX(100%);
+  }
+  .sheet[data-side="left"][open] {
+    transform: translateX(-100%);
+  }
+}
+.sheet::backdrop {
+  background: rgb(11 11 12 / 0);
+  transition:
+    background 0.32s ease,
+    overlay 0.32s allow-discrete,
+    display 0.32s allow-discrete;
+}
+.sheet[open]::backdrop {
+  background: rgb(11 11 12 / 0.62);
+}
+@starting-style {
+  .sheet[open]::backdrop {
+    background: rgb(11 11 12 / 0);
+  }
+}
+
+/* Hero autoplay: the progress bar *is* the timer (see HeroSlider) */
+.hero-progress {
+  transform-origin: left;
+  animation: hero-progress 7s linear forwards;
+}
+.hero-root:hover .hero-progress,
+.hero-root:focus-within .hero-progress {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-progress {
+    animation: none;
+    transform: scaleX(1);
+  }
 }
