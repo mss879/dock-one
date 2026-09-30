@@ -336,3 +336,168 @@
     transform: scaleX(1);
   }
 }
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Admin theme (BUILD_SPEC §2.11, blueprint §11.3.10). Own tokens, scoped under
+ * .admin-root — nothing here touches the storefront. Brand-consistent (ink, violet,
+ * lime, mono labels) but calmer and denser. Utilities: bg-adm-panel, text-adm-mute,
+ * border-adm-line … resolve to the scoped variables below (they are unset outside
+ * .admin-root, so they can't leak into storefront markup).
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+@theme inline {
+  --color-adm-bg: var(--adm-bg);
+  --color-adm-panel: var(--adm-panel);
+  --color-adm-panel-2: var(--adm-panel-2);
+  --color-adm-hover: var(--adm-hover);
+  --color-adm-ink: var(--adm-ink);
+  --color-adm-ink-2: var(--adm-ink-2);
+  --color-adm-mute: var(--adm-mute);
+  --color-adm-line: var(--adm-line);
+  --color-adm-line-strong: var(--adm-line-strong);
+  --color-adm-accent: var(--adm-accent);
+  --color-adm-accent-ink: var(--adm-accent-ink);
+  --color-adm-accent-soft: var(--adm-accent-soft);
+  --color-adm-signal: var(--adm-signal);
+  --color-adm-signal-soft: var(--adm-signal-soft);
+  --color-adm-signal-ink: var(--adm-signal-ink);
+  --color-adm-nav: var(--adm-nav);
+  --color-adm-nav-2: var(--adm-nav-2);
+  --color-adm-nav-line: var(--adm-nav-line);
+  --color-adm-nav-text: var(--adm-nav-text);
+  --color-adm-nav-mute: var(--adm-nav-mute);
+}
+
+.admin-root {
+  --adm-bg: #f4f4f2;
+  --adm-panel: #ffffff;
+  --adm-panel-2: #f8f8f6;
+  --adm-hover: #f6f3ff;
+  --adm-ink: #0b0b0c;
+  --adm-ink-2: #3a3a40;
+  /* ≥ 4.5:1 on panel and bg */
+  --adm-mute: #63636b;
+  --adm-line: #e2e2de;
+  --adm-line-strong: #c8c8c3;
+  --adm-accent: #6d3bff;
+  --adm-accent-ink: #4f22d9;
+  --adm-accent-soft: #efe9ff;
+  --adm-signal: #d4ff3a;
+  --adm-signal-soft: #f3ffd2;
+  --adm-signal-ink: #3b4d00;
+  --adm-nav: #0b0b0c;
+  --adm-nav-2: #161618;
+  --adm-nav-line: #2a2a2f;
+  --adm-nav-text: #e6e6e9;
+  --adm-nav-mute: #a1a1aa;
+
+  background: var(--adm-bg);
+  color: var(--adm-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Native <dialog> modals and drawers (components/admin/ui/Modal.tsx, Drawer.tsx) */
+.adm-dialog {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.18s var(--ease-brut),
+    transform 0.18s var(--ease-brut),
+    overlay 0.18s allow-discrete,
+    display 0.18s allow-discrete;
+}
+.adm-dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+@starting-style {
+  .adm-dialog[open] {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.adm-drawer {
+  transform: translateX(100%);
+  transition:
+    transform 0.26s var(--ease-brut),
+    overlay 0.26s allow-discrete,
+    display 0.26s allow-discrete;
+}
+.adm-drawer[data-side="left"] {
+  transform: translateX(-100%);
+}
+.adm-drawer[open] {
+  transform: none;
+}
+@starting-style {
+  .adm-drawer[open] {
+    transform: translateX(100%);
+  }
+  .adm-drawer[data-side="left"][open] {
+    transform: translateX(-100%);
+  }
+}
+.adm-dialog::backdrop,
+.adm-drawer::backdrop {
+  background: rgb(11 11 12 / 0);
+  transition:
+    background 0.2s ease,
+    overlay 0.2s allow-discrete,
+    display 0.2s allow-discrete;
+}
+.adm-dialog[open]::backdrop,
+.adm-drawer[open]::backdrop {
+  background: rgb(11 11 12 / 0.5);
+}
+@starting-style {
+  .adm-dialog[open]::backdrop,
+  .adm-drawer[open]::backdrop {
+    background: rgb(11 11 12 / 0);
+  }
+}
+
+/* Loading skeletons */
+@keyframes adm-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.adm-skeleton {
+  background: linear-gradient(90deg, var(--adm-panel-2) 0%, var(--adm-line) 50%, var(--adm-panel-2) 100%);
+  background-size: 200% 100%;
+  animation: adm-shimmer 1.4s linear infinite;
+}
+
+/* Indeterminate progress bar (a table refreshing while it keeps its rows) */
+@keyframes adm-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+.adm-progress {
+  animation: adm-progress 1.1s var(--ease-brut) infinite;
+}
+
+@keyframes adm-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.adm-toast {
+  animation: adm-toast-in 0.2s var(--ease-brut) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-skeleton,
+  .adm-progress {
+    animation: none;
+  }
+}

@@ -1,23 +1,31 @@
 import Link from "next/link";
-import { mainNav } from "@/data/site";
+import { getCategories } from "@/lib/catalogue";
+import { getFooterLinks } from "@/lib/content";
+import { getStoreSettings } from "@/lib/settings";
+import { telHref } from "./contact";
 import { HeaderCounters } from "./HeaderCounters";
 import { Logo } from "./Logo";
 import { MobileMenu } from "./MobileMenu";
+import { mainNav, utilityNav } from "./nav";
 import { ProfileMenu } from "./ProfileMenu";
 import { SearchBar } from "./SearchBar";
 import { SysClock } from "./SysClock";
 
-export function Header() {
+/** Sticky header. Nav = Shop, the active categories (→ /shop?category=<id>), Deals, New. */
+export async function Header() {
+  const [categories, settings, links] = await Promise.all([getCategories(), getStoreSettings(), getFooterLinks()]);
+  const nav = mainNav(categories);
+  const tel = telHref(settings.phone);
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/92 backdrop-blur-md">
       <div className="shell flex h-16 items-center gap-3 lg:h-[72px] lg:gap-6">
-        <MobileMenu />
+        <MobileMenu items={nav} utility={utilityNav(links.storeLocator)} hotline={settings.phone && tel ? { display: settings.phone, href: tel } : null} />
         <Logo />
 
         <nav aria-label="Main" className="hidden h-full items-center border-l border-line pl-6 lg:flex">
           <ul className="label flex items-center font-medium">
-            {mainNav.slice(1).map((item, i) => (
-              <li key={item.label} className="flex items-center">
+            {nav.slice(1).map((item, i) => (
+              <li key={item.href} className="flex items-center">
                 {i > 0 && (
                   <span aria-hidden className="px-2.5 text-violet xl:px-3.5">
                     /

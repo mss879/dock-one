@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Cross } from "@/components/ui/Cross";
 
+/** "BASKET_EMPTY" (DESIGN.md §6 empty states). The CTA goes to the deals listing (BUILD_SPEC §6 nav). */
 export function EmptyBasket({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
@@ -12,7 +13,7 @@ export function EmptyBasket({ onNavigate }: { onNavigate?: () => void }) {
       <p className="label mt-6 font-semibold text-violet-ink">&gt; Basket_empty</p>
       <p className="display mt-2 text-3xl">Nothing in here yet</p>
       <p className="mt-2 max-w-xs text-sm text-ink-2">Browse the opening deals — everything ships island-wide with official warranty.</p>
-      <Button href="/#flash-deals" onClick={onNavigate} className="mt-6">
+      <Button href="/shop?filter=deals" onClick={onNavigate} className="mt-6">
         Shop the deals
       </Button>
     </div>

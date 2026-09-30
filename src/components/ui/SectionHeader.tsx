@@ -4,7 +4,7 @@ import { Cross } from "./Cross";
 
 type Props = {
   index: string;
-  title: string;
+  title: ReactNode;
   id?: string;
   viewAllHref?: string;
   viewAllLabel?: string;

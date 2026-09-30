@@ -1,8 +1,14 @@
 import { Search } from "lucide-react";
+import { SEARCH_MAX_LENGTH, SHOP_PATH } from "@/lib/catalogue-queries";
 
+/**
+ * Site search (BUILD_SPEC §9 WP-A): a plain GET form to /shop?q= — works without JavaScript,
+ * no typeahead (not in the blueprint or the approved design). The query is capped at the length
+ * search_products honours.
+ */
 export function SearchBar({ id, className = "" }: { id: string; className?: string }) {
   return (
-    <form role="search" action="/" className={`flex h-11 min-w-0 items-stretch border border-line bg-surface transition-colors focus-within:border-ink ${className}`}>
+    <form role="search" action={SHOP_PATH} method="get" className={`flex h-11 min-w-0 items-stretch border border-line bg-surface transition-colors focus-within:border-ink ${className}`}>
       <label htmlFor={id} className="sr-only">
         Search products
       </label>
@@ -12,6 +18,8 @@ export function SearchBar({ id, className = "" }: { id: string; className?: stri
         type="search"
         placeholder="Search laptops, SSDs, keyboards…"
         autoComplete="off"
+        maxLength={SEARCH_MAX_LENGTH}
+        required
         className="min-w-0 flex-1 bg-transparent px-3.5 font-mono text-[13px] outline-none placeholder:text-mute"
       />
       <button type="submit" aria-label="Search" className="grid aspect-square h-full place-items-center bg-violet text-white transition-colors hover:bg-ink">

@@ -1,7 +1,9 @@
 # DESIGN.md — Dock One Solutions storefront
 
-> Phone numbers, domain and product data are placeholders. Everything brand-specific lives in
-> `src/data/site.ts` and `src/data/products.ts`.
+> Phone numbers, domain and product data are placeholders. The brand constants (name, wordmark,
+> description) live in `src/data/site.ts`; everything else the owner controls — products,
+> homepage banners and copy, contact details, delivery rule — lives in the Supabase database and
+> is edited in the admin panel (`/admin`). See `supabase/MIGRATION_PLAN.md`.
 
 ## 1. Identity
 

@@ -7,11 +7,14 @@ import { pad2 } from "@/lib/format";
 /**
  * Cross-fading carousel. Autoplay has no JS timer: the progress bar's CSS animation
  * (7s, paused on hover/focus, disabled under reduced motion) advances the slide
- * when it ends — see `.hero-progress` in globals.css.
+ * when it ends — see `.hero-progress` in globals.css. With a single slide there is
+ * nothing to advance: no progress bar, no arrows.
  */
 export function HeroSlider({ labels, footer, children }: { labels: string[]; footer?: ReactNode; children: ReactNode }) {
   const slides = Children.toArray(children);
   const [index, setIndex] = useState(0);
+  const multiple = slides.length > 1;
+  const current = Math.min(index, Math.max(slides.length - 1, 0));
   const go = (next: number) => setIndex((next + slides.length) % slides.length);
   const control = "grid size-11 place-items-center border border-night-line text-paper transition-colors hover:border-lime hover:bg-lime hover:text-ink";
 
@@ -23,9 +26,9 @@ export function HeroSlider({ labels, footer, children }: { labels: string[]; foo
             key={i}
             role="group"
             aria-roledescription="slide"
-            aria-label={`${i + 1} of ${slides.length}: ${labels[i]}`}
-            inert={i !== index}
-            className={`col-start-1 row-start-1 transition-opacity duration-700 ease-brut ${i === index ? "opacity-100" : "opacity-0"}`}
+            aria-label={`${i + 1} of ${slides.length}: ${labels[i] ?? ""}`}
+            inert={i !== current}
+            className={`col-start-1 row-start-1 transition-opacity duration-700 ease-brut ${i === current ? "opacity-100" : "opacity-0"}`}
           >
             {slide}
           </div>
@@ -36,20 +39,22 @@ export function HeroSlider({ labels, footer, children }: { labels: string[]; foo
         <div className="hidden items-center md:flex">{footer}</div>
         <div className="ml-auto flex items-center gap-4 py-3">
           <p className="label flex items-center gap-3 tabular-nums" aria-live="polite">
-            <span className="font-bold text-lime">{pad2(index + 1)}</span>
+            <span className="font-bold text-lime">{pad2(current + 1)}</span>
             <span aria-hidden className="block h-px w-16 bg-night-line sm:w-24">
-              <span key={index} className="hero-progress block h-px bg-lime" onAnimationEnd={() => go(index + 1)} />
+              {multiple && <span key={current} className="hero-progress block h-px bg-lime" onAnimationEnd={() => go(current + 1)} />}
             </span>
             <span className="text-night-mute">{pad2(slides.length)}</span>
           </p>
-          <div className="flex gap-1.5">
-            <button type="button" aria-label="Previous slide" onClick={() => go(index - 1)} className={control}>
-              <ArrowLeft aria-hidden className="size-4" />
-            </button>
-            <button type="button" aria-label="Next slide" onClick={() => go(index + 1)} className={control}>
-              <ArrowRight aria-hidden className="size-4" />
-            </button>
-          </div>
+          {multiple && (
+            <div className="flex gap-1.5">
+              <button type="button" aria-label="Previous slide" onClick={() => go(current - 1)} className={control}>
+                <ArrowLeft aria-hidden className="size-4" />
+              </button>
+              <button type="button" aria-label="Next slide" onClick={() => go(current + 1)} className={control}>
+                <ArrowRight aria-hidden className="size-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# the documented template carries no secrets and must be committed
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +44,7 @@ next-env.d.ts
 
 # raw AI generations (large PNGs) — processed WebP lives in public/images
 /scripts/images/raw/
+
+# Supabase CLI scratch + generated migration bundles (scripts/db/bundle.sh)
+supabase/.temp/
+supabase/bundles/

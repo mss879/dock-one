@@ -1,17 +1,15 @@
 import Link from "next/link";
-import { categories, discountPercent, type Product } from "@/data/products";
-import { productHref } from "@/data/site";
-import { formatLKR } from "@/lib/format";
+import { discountPercent, productHref, type ProductCardData } from "@/lib/catalogue-shared";
 import { Cross } from "@/components/ui/Cross";
+import { Price } from "@/components/ui/Price";
 import { AddToCartButton } from "./AddToCartButton";
 import { ProductImage } from "./ProductImage";
 import { Rating } from "./Rating";
 import { WishlistButton } from "./WishlistButton";
 
-const categoryName = Object.fromEntries(categories.map((c) => [c.id, c.name]));
-
-export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-width: 768px) 30vw, 46vw" }: { product: Product; sizes?: string }) {
+export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-width: 768px) 30vw, 46vw" }: { product: ProductCardData; sizes?: string }) {
   const off = discountPercent(product);
+  const href = productHref(product);
   return (
     <article className="group relative flex h-full flex-col border border-line bg-surface transition-colors duration-150 hover:border-ink">
       <Cross className="-top-[6px] -left-[6px] text-ink opacity-0 transition-opacity group-hover:opacity-100" />
@@ -25,9 +23,11 @@ export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-
         <WishlistButton productId={product.id} productName={product.name} />
       </div>
 
-      <Link href={productHref(product.slug)} tabIndex={-1} aria-hidden className="bg-grid relative block aspect-square overflow-hidden border-b border-line bg-paper [--grid-size:24px]">
+      <Link href={href} tabIndex={-1} aria-hidden className="bg-grid relative block aspect-square overflow-hidden border-b border-line bg-paper [--grid-size:24px]">
         <ProductImage
-          product={product}
+          src={product.imageUrl}
+          alt={product.name}
+          categoryId={product.categoryId}
           sizes={sizes}
           decorative
           className="absolute inset-0 size-full object-contain p-5 transition-transform duration-500 ease-brut group-hover:scale-[1.06]"
@@ -35,25 +35,20 @@ export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-
       </Link>
 
       <div className="flex flex-1 flex-col gap-2 p-3 sm:p-3.5">
-        <p className="label text-violet-ink">{categoryName[product.category]}</p>
+        {product.categoryName && <p className="label text-violet-ink">{product.categoryName}</p>}
         <h3 className="line-clamp-2 min-h-10 text-sm leading-5 font-medium">
-          <Link href={productHref(product.slug)} className="hover:underline hover:underline-offset-2">
+          <Link href={href} className="hover:underline hover:underline-offset-2">
             {product.name}
           </Link>
         </h3>
-        <p className="label line-clamp-1 text-mute normal-case tracking-normal">{product.specs}</p>
-        <Rating value={product.rating} reviews={product.reviews} />
+        {product.subtitle && <p className="label line-clamp-1 text-mute normal-case tracking-normal">{product.subtitle}</p>}
+        <Rating value={product.ratingAvg} count={product.ratingCount} />
         <div className="mt-auto flex items-end justify-between gap-1 pt-2 sm:gap-2">
           <p className="font-mono leading-tight whitespace-nowrap tabular-nums">
-            {product.compareAt && (
-              <s className="block text-[11px] text-mute sm:text-xs">
-                <span className="sr-only">Was </span>
-                {formatLKR(product.compareAt)}
-              </s>
-            )}
-            <span className="text-[13px] font-bold sm:text-[15px]">{formatLKR(product.price)}</span>
+            {product.variantCount > 1 && <span className="block text-[11px] text-mute">From</span>}
+            <Price amount={product.price} compareAt={product.compareAtPrice} compareClassName="block text-[11px] text-mute sm:text-xs" className="text-[13px] font-bold sm:text-[15px]" />
           </p>
-          <AddToCartButton productId={product.id} productName={product.name} />
+          <AddToCartButton product={product} />
         </div>
       </div>
     </article>

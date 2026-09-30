@@ -23,7 +23,10 @@ export function Sheet({ open, onClose, side = "right", label, children }: Props)
       ref={ref}
       aria-label={label}
       data-side={side}
-      onClose={onClose}
+      onClose={(event) => {
+        // React 19 also delivers a nested dialog's close event here: only react to our own.
+        if (event.target === event.currentTarget) onClose();
+      }}
       onClick={(event) => {
         // the dialog has no padding, so a click that lands on it is a backdrop click
         if (event.target === event.currentTarget) onClose();

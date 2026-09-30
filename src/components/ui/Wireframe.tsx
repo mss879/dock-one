@@ -1,16 +1,16 @@
-import type { CategoryId } from "@/data/products";
-
 const KEY_ROWS = [
   { y: 78, keys: 13, inset: 0 },
   { y: 92, keys: 12, inset: 4 },
   { y: 106, keys: 11, inset: 8 },
 ];
 
+const KNOWN = new Set(["laptops", "storage", "keyboards", "mice"]);
+
 /**
- * CAD-style line art per category. Stands in wherever a generated product
- * image is not in the manifest yet, so the layout never breaks.
+ * CAD-style line art per category. Stands in wherever a product has no image yet, so the
+ * layout never breaks. Categories added later (or none) get a generic device drawing.
  */
-export function Wireframe({ category, className = "" }: { category: CategoryId; className?: string }) {
+export function Wireframe({ category, className = "" }: { category: string; className?: string }) {
   return (
     <svg aria-hidden viewBox="0 0 200 200" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" className={className}>
       <g strokeWidth="0.5" strokeDasharray="2 4" opacity="0.5">
@@ -53,6 +53,15 @@ export function Wireframe({ category, className = "" }: { category: CategoryId; 
           <rect x="49" y="120" width="78" height="9" rx="1.5" />
           <rect x="131" y="120" width="20" height="9" rx="1.5" opacity="0.7" />
           <circle cx="170" cy="82" r="5" />
+        </g>
+      )}
+
+      {!KNOWN.has(category) && (
+        <g>
+          <rect x="46" y="46" width="108" height="108" rx="6" />
+          <rect x="60" y="60" width="80" height="58" opacity="0.6" />
+          <path d="M60 132h52M60 142h30" opacity="0.6" />
+          <circle cx="134" cy="137" r="7" />
         </g>
       )}
 

@@ -4,7 +4,20 @@
     {
       "name": "azam-bro dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "azam-bro start",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "start"
+      ],
       "port": 3000,
       "autoPort": true
     }

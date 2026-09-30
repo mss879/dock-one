@@ -1,9 +1,16 @@
-import { Truck } from "lucide-react";
-import { site } from "@/data/site";
-import { formatLKR } from "@/lib/format";
+"use client";
 
-export function FreeDeliveryBar({ subtotal, toFreeDelivery }: { subtotal: number; toFreeDelivery: number }) {
-  const progress = Math.min(1, subtotal / site.freeDeliveryThreshold);
+import { Truck } from "lucide-react";
+import { Price } from "@/components/ui/Price";
+
+/**
+ * Progress to free delivery. Fed by the authoritative quote (quote_order reads the same
+ * store_settings row place_order charges from) or, until it arrives, by the cart summary, which
+ * mirrors the rule through lib/delivery.ts. Renders nothing when the store has no threshold.
+ */
+export function FreeDeliveryBar({ subtotal, toFreeDelivery, threshold }: { subtotal: number; toFreeDelivery: number | null; threshold: number | null }) {
+  if (toFreeDelivery === null || threshold === null) return null;
+  const progress = threshold > 0 ? Math.min(1, subtotal / threshold) : 1;
   const unlocked = toFreeDelivery === 0;
   return (
     <div>
@@ -13,7 +20,7 @@ export function FreeDeliveryBar({ subtotal, toFreeDelivery }: { subtotal: number
           <span className="font-semibold">Free island-wide delivery unlocked</span>
         ) : (
           <span>
-            <span className="font-bold">{formatLKR(toFreeDelivery)}</span> away from free delivery
+            <Price amount={toFreeDelivery} className="font-bold" /> away from free delivery
           </span>
         )}
       </p>
