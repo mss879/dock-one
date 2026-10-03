@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { site } from "@/data/site";
 import { BestSellers } from "@/components/home/BestSellers";
 import { CategoryPopouts } from "@/components/home/CategoryPopouts";
@@ -33,6 +34,9 @@ import { getStoreSettings } from "@/lib/settings";
  * saves refresh it by tag. A section with no data is left out (never a broken grid, never invented
  * content), and the /NN indices count only the sections that render.
  */
+
+// Title, description and og:image come from the root layout (og:image: src/app/opengraph-image.jpg).
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 function isFuture(iso: string | null): iso is string {
   if (!iso) return false;

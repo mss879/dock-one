@@ -1,0 +1,80 @@
+<!doctype html>
+<!--
+  Share card (Open Graph / X) — 1200×630, the homepage hero image with the brand lock-up.
+  Copy is the brand constants only (src/data/site.ts title + description), never a time-limited
+  hero slide, so the card does not go stale. Rendered to src/app/opengraph-image.jpg and
+  twitter-image.jpg by scripts/images/og.sh.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500&display=block" rel="stylesheet">
+<style>
+  :root { --ink:#0b0b0c; --paper:#f3f3f1; --violet:#6d3bff; --lime:#d4ff3a; --mute:#a1a1aa; --bg:#07070b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1200px; height:630px; overflow:hidden; background:var(--bg); }
+  .card { position:relative; width:1200px; height:630px; color:var(--paper); font-family:"Space Grotesk", sans-serif; }
+  .photo { position:absolute; top:0; right:0; height:630px; width:1120px; object-fit:cover; object-position:right center; }
+  .fade { position:absolute; inset:0; background:linear-gradient(90deg, var(--bg) 0%, var(--bg) 30%, rgb(7 7 11 / 0.55) 46%, rgb(7 7 11 / 0) 60%); }
+  .label { font-family:"JetBrains Mono", monospace; text-transform:uppercase; letter-spacing:0.08em; }
+
+  /* HUD — as in the hero */
+  .cross { position:absolute; width:18px; height:18px; }
+  .cross::before, .cross::after { content:""; position:absolute; background:rgb(243 243 241 / 0.7); }
+  .cross::before { left:8px; top:0; width:2px; height:18px; }
+  .cross::after { top:8px; left:0; height:2px; width:18px; }
+  .readout { position:absolute; right:40px; bottom:40px; border:1px solid rgb(212 255 58 / 0.6); background:rgb(11 11 12 / 0.4); color:var(--lime); padding:10px 14px; font-size:14px; line-height:1.6; }
+
+  .copy { position:absolute; left:64px; top:56px; bottom:56px; width:600px; display:flex; flex-direction:column; }
+  .logo { display:flex; align-items:center; gap:16px; }
+  .mark { display:grid; grid-template-columns:repeat(3, 14px); grid-template-rows:repeat(3, 14px); gap:3.5px; }
+  .mark i { display:block; }
+  .wm-1 { white-space:nowrap; font-family:Anton, sans-serif; font-size:40px; line-height:0.95; letter-spacing:0.025em; text-transform:uppercase; }
+  .wm-1 b { font-weight:400; color:var(--violet); }
+  .wm-2 { font-size:13px; line-height:1; letter-spacing:0.42em; color:var(--mute); margin-top:4px; }
+
+  .main { margin-top:auto; }
+  .chip { display:inline-block; background:var(--lime); color:var(--ink); font-weight:700; font-size:15px; padding:6px 10px; }
+  h1 { font-family:Anton, sans-serif; font-weight:400; text-transform:uppercase; font-size:72px; line-height:0.92; margin-top:22px; white-space:nowrap; }
+  h1 b { font-weight:400; color:var(--violet); }
+  .perks { display:flex; gap:18px; margin-top:26px; font-size:13px; white-space:nowrap; color:rgb(243 243 241 / 0.85); }
+  .perks span::before { content:""; display:inline-block; width:8px; height:8px; background:var(--lime); margin-right:9px; vertical-align:1px; }
+  .domain { margin-top:30px; font-size:17px; color:rgb(243 243 241 / 0.75); }
+  .domain b { color:var(--lime); font-weight:700; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="photo" src="../../public/images/hero/opening.webp" alt="">
+    <div class="fade"></div>
+
+    <span class="cross" style="top:40px; left:52%"></span>
+    <span class="cross" style="top:40px; right:40px"></span>
+    <span class="cross" style="bottom:40px; left:52%"></span>
+    <p class="readout label">X_06.9271<br>Y_79.8612<br>Z_CMB.01</p>
+
+    <div class="copy">
+      <div class="logo">
+        <span class="mark">
+          <i style="background:var(--paper)"></i><i></i><i style="background:var(--violet)"></i>
+          <i></i><i style="background:var(--paper)"></i><i></i>
+          <i style="background:var(--lime)"></i><i></i><i style="background:var(--paper)"></i>
+        </span>
+        <span>
+          <span class="wm-1" style="display:block">Dock One<b>_</b></span>
+          <span class="wm-2 label" style="display:block">Solutions</span>
+        </span>
+      </div>
+
+      <div class="main">
+        <span class="chip label">Sri Lanka's tech store</span>
+        <h1>Laptops, storage,<br>keyboards &amp; mice<b>_</b></h1>
+        <p class="perks label"><span>Official warranty</span><span>Cash on delivery</span><span>Island-wide delivery</span></p>
+        <p class="domain label"><b>&gt;</b> dockonesolutions.com</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

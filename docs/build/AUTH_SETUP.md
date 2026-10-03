@@ -43,7 +43,7 @@ Then **Authentication → Rate Limits**: raise "emails sent per hour" to what th
 Supabase → **Authentication → URL Configuration**
 
 - **Site URL**: the storefront's origin — the same value as `NEXT_PUBLIC_SITE_URL`
-  (e.g. `https://dockone.lk`; that domain is a placeholder until the real one is chosen).
+  (`https://dockonesolutions.com`).
 - **Redirect URLs**: add
   - `https://<your-domain>/auth/callback` (production — any path on the Site URL's own host is
     accepted anyway);

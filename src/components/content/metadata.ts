@@ -3,6 +3,7 @@ import { site } from "@/data/site";
 import { absoluteUrl, siteUrl } from "@/lib/env";
 import { markdownToText } from "@/lib/markdown";
 import type { BlogPost, CmsPage } from "@/lib/cms";
+import { shareImages } from "@/components/seo/share-image";
 import { blogPostHref } from "./cms-shared";
 
 /**
@@ -38,7 +39,7 @@ export function cmsPageMetadata(page: CmsPage | null, path: string): Metadata {
       url: path,
       title,
       description,
-      ...(page.coverImage ? { images: [page.coverImage] } : {}),
+      images: shareImages(page.coverImage),
     },
   };
 }
@@ -64,7 +65,7 @@ export function blogPostMetadata(post: BlogPost | null): Metadata {
       ...(post.updatedAt ? { modifiedTime: post.updatedAt } : {}),
       ...(post.author ? { authors: [post.author] } : {}),
       ...(post.tags.length ? { tags: post.tags } : {}),
-      ...(post.coverImage ? { images: [post.coverImage] } : {}),
+      images: shareImages(post.coverImage),
     },
   };
 }

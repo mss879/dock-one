@@ -10,6 +10,7 @@ import { TrackEvent } from "@/components/catalogue/TrackEvent";
 import { Rating } from "@/components/product/Rating";
 import { ProductReviews } from "@/components/reviews/ProductReviews";
 import { ProductJsonLd, type JsonLdAvailability } from "@/components/seo/ProductJsonLd";
+import { shareImages } from "@/components/seo/share-image";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { categoryHref, fetchAvailability, findProductById, getRelatedProducts, productHref, toProductId, type ProductDetail } from "@/lib/catalogue";
@@ -58,7 +59,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     title,
     description,
     alternates: { canonical },
-    openGraph: { type: "website", url: canonical, title, description, images: product.images.slice(0, 1) },
+    openGraph: { type: "website", url: canonical, title, description, images: shareImages(product.images[0]) },
   };
 }
 

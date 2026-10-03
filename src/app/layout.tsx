@@ -19,7 +19,8 @@ export const metadata: Metadata = {
   title: { default: `${site.name} — Laptops, storage, keyboards & mice in Sri Lanka`, template: `%s — ${site.name}` },
   description: site.description,
   applicationName: site.name,
-  openGraph: { type: "website", siteName: site.name, locale: "en_LK", images: ["/images/hero/opening.webp"] },
+  // og:image is the file convention src/app/opengraph-image.jpg (see components/seo/share-image.ts).
+  openGraph: { type: "website", siteName: site.name, locale: "en_LK" },
   twitter: { card: "summary_large_image" },
 };
 

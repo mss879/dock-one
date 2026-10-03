@@ -6,6 +6,7 @@ import { ShopSort } from "@/components/catalogue/ShopSort";
 import { TrackEvent } from "@/components/catalogue/TrackEvent";
 import { ProductImage } from "@/components/product/ProductImage";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+import { shareImages } from "@/components/seo/share-image";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { collectionHref, findCollection, listProducts, type Collection } from "@/lib/catalogue";
@@ -44,7 +45,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     title: `${collection.seoTitle ?? collection.title}${page > 1 ? ` — page ${page}` : ""}`,
     description: collection.seoDescription ?? collection.description ?? collection.subtitle ?? undefined,
     alternates: { canonical },
-    openGraph: collection.coverImage ? { images: [collection.coverImage] } : undefined,
+    openGraph: { images: shareImages(collection.coverImage) },
   };
 }
 

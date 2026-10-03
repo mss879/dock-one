@@ -8,6 +8,7 @@ import { getStoreSettings, phoneDigits, type StoreSettings } from "@/lib/setting
 export const metadata: Metadata = {
   title: "Contact us",
   description: "Send Dock One Solutions a message about a product, an order or delivery.",
+  alternates: { canonical: "/contact" },
 };
 
 type Channel = { key: string; label: string; icon: LucideIcon; value: ReactNode };

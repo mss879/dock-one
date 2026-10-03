@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 export const metadata: Metadata = {
   title: "Track your order",
   description: "Check the status of your Dock One Solutions order with your order number and email.",
+  alternates: { canonical: "/track" },
 };
 
 /** /track — guest order tracking (blueprint §9.8). Static shell; the lookup is a POST from the island. */

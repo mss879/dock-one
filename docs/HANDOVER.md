@@ -70,7 +70,8 @@ run in production mode without the Supabase URL and anon key.
   replace with real products in admin → Products, or delete with the statement in the seed's header.
 - **Placeholder contact details** (seed 31): phone +94 11 234 5678, WhatsApp +94 77 123 4567,
   hello@dockone.lk, "No. 42, Galle Road, Colombo 03" — admin → Store settings.
-- **Domain** — `https://dockone.lk` is a placeholder until `NEXT_PUBLIC_SITE_URL` is set.
+- **Domain** — `https://dockonesolutions.com` (the fallback when `NEXT_PUBLIC_SITE_URL` is unset; set it to the
+  same value on the host so sitemap, canonical and share-image URLs all use it).
 - **OPENING10** (seed 32) — keep only if the offer is real.
 - **Privacy page** (seed 33) is a template: fill the `[BRACKETED]` placeholders, have it reviewed,
   delete the "Template" note. Write and publish the terms and returns pages (not seeded — nothing

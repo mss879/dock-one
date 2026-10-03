@@ -15,7 +15,7 @@ for your feature.
 | Key | Value |
 | --- | --- |
 | `BRAND` | Dock One Solutions (`src/data/site.ts` keeps name + wordmark only) |
-| `SITE_URL` | `NEXT_PUBLIC_SITE_URL` (fallback `https://dockone.lk` — placeholder domain) |
+| `SITE_URL` | `NEXT_PUBLIC_SITE_URL` (fallback `https://dockonesolutions.com` — the live domain) |
 | `BASE_CURRENCY` | **LKR**. Prices are whole rupees; display `Rs. 489,900` (existing `formatLKR`). Stored `NUMERIC(12,2)` |
 | `DISPLAY_CURRENCIES` | LKR (base), USD, GBP, EUR, AUD, INR, AED — presentation only (§9.3) |
 | `COUNTRY` / `MARKET` | Sri Lanka, island-wide delivery (25 districts) + optional showroom pickup |

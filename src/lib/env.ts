@@ -14,8 +14,8 @@ const rawSupabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
 const rawSupabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
 const rawSiteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
 
-/** Placeholder domain until the client's real one is set (BUILD_SPEC §1). */
-export const FALLBACK_SITE_URL = "https://dockone.lk";
+/** The live domain, used when NEXT_PUBLIC_SITE_URL is unset (BUILD_SPEC §1). */
+export const FALLBACK_SITE_URL = "https://dockonesolutions.com";
 
 function parseHttpUrl(value: string): URL | null {
   if (!value) return null;

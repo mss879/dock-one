@@ -63,7 +63,7 @@ export const supabaseUrl: string;            // origin, "" when unset/invalid
 export const supabaseAnonKey: string;
 export const isSupabaseConfigured: boolean;
 export const supabaseStoragePublicPrefix: string; // `${supabaseUrl}/storage/v1/object/public/`
-export const siteUrl: string;                 // NEXT_PUBLIC_SITE_URL origin, fallback https://dockone.lk
+export const siteUrl: string;                 // NEXT_PUBLIC_SITE_URL origin, fallback https://dockonesolutions.com
 export function absoluteUrl(path?: string): string; // absoluteUrl("/order/DO-10001")
 export const isProduction: boolean;
 
