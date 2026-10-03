@@ -73,9 +73,10 @@ simply hidden. Nothing crashes.
 | 30–33 | **Demo content** (seeds) | `30_…`–`33_…` | the feature they fill | The approved design's content, moved into the database |
 | 34 | **Real inventory** | `34_seed_inventory.sql` | 04, 05, 30 | The client's 86 stock rows as 59 live products, prices and stock; demo catalogue hidden |
 | 35 | Inventory costs (**not in git**) | `35_seed_inventory_costs.sql` | 34 | Cost and dealer prices for those variants — admin-only |
+| 36 | Inventory update | `36_seed_inventory_update.sql` | 34 | The second stock list: 2 new items (awaiting prices), 3 stock corrections, details |
 
 The simplest safe route is: **01 → 23 in order, then the seeds you want**, and `24` once the admin
-account exists. Then **34, then 35** for the real catalogue.
+account exists. Then **34, 35, 36** for the real catalogue.
 
 ---
 
@@ -403,6 +404,7 @@ workbook cell.
 | File | Fills | Needs | After running |
 | --- | --- | --- | --- |
 | `34_seed_inventory.sql` | 5 new departments (Monitors, Audio, Power & Charging, Cameras & Instax, Networking & Components; "Mice" → "Mice & Mousepads"); 59 products / 86 variants — colour, size, capacity, switch and GPU rows grouped as variants of one product; price = "Final Selling" (a range uses the **lower** figure, the range is kept); stock = "Quantity"; brand excerpts as highlights. Adds two **admin-only** tables, `product_sourcing` (brand title, brand page, review notes incl. HOLD items) and `variant_sourcing` (workbook row, original text, colour, dealer price, price note). Switches the 16 demo products and 4 demo collections **off** (not deleted) | 04, 05, 30 | Add photos and descriptions (admin → Products); review the HOLD notes (query in the file's ops note); set new / best-seller / flash-deal flags and featured collections so the homepage sections fill again |
+| `36_seed_inventory_update.sql` | From the second stock list (`scripts/db/inventory/build_update.py`): new product ASUS VivoBook E1504FA-BQ2909 and new variant JBL Tune 730BT White — both in stock but **unpriced, so switched off**; stock A1504VA 1→2, MK270 2→3, Cruzer Blade 16GB 0→1 (only where stock still holds 34's figure); Blackshadow colour Black; One Touch "2TB Black" → "2TB"; "gaming laptop" tag | 34 | Price the two new items and switch their variants on |
 | `35_seed_inventory_costs.sql` | "Cost per unit" → `product_costs`, "Dealer Selling" → `variant_sourcing.dealer_price` | 34 | — . **Git-ignored**: the repo is public and these are the client's margins. Keep the file safe outside the repo |
 
 ---
