@@ -2,6 +2,7 @@
 -- stock untouched unless supplied), admin_set_collection_products (hand-picked members + order),
 -- the admin list views (RLS), and the tile-art cleanup when a product is deleted.
 \ir _helpers.sql
+\ir _demo_only.sql
 
 SELECT set_config('t.owner', pg_temp.new_user('owner@shop.test')::text, false);
 SELECT pg_temp.make_admin(current_setting('t.owner')::uuid);

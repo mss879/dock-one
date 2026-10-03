@@ -4,6 +4,7 @@
 -- "zentor") so it never depends on seed 30's demo data — the seed rows are still present and
 -- simply never match these words.
 \ir _helpers.sql
+\ir _demo_only.sql
 
 -- ── fixtures ────────────────────────────────────────────────────────────────
 INSERT INTO public.categories (id, name, sort_order) VALUES

@@ -1,5 +1,5 @@
 import "server-only";
-import { siteUrl } from "@/lib/env";
+import { absoluteUrl, siteUrl } from "@/lib/env";
 
 /**
  * Email layout primitives (blueprint §9.9). Email clients are hostile: TABLES and INLINE
@@ -30,6 +30,9 @@ const FONT_DISPLAY = "Anton, Impact, 'Arial Narrow', 'Helvetica Neue', Arial, sa
 const FONT_MONO = "'JetBrains Mono', Menlo, Consolas, 'Courier New', monospace";
 
 const BRAND = "Dock One Solutions";
+
+/** The DO icon (gold on ink, the favicon art — scripts/images/icons.py) beside the "Dock One_" text. */
+const LOGO_ICON = absoluteUrl("/icons/icon-192.png");
 
 /** HTML-escape any interpolated value. */
 export function esc(value: unknown): string {
@@ -117,8 +120,11 @@ export function emailShell({ preheader, eyebrow, heading, intro, bodyHtml, foote
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;max-width:600px;">
 <tr><td style="background:${EMAIL_COLORS.ink};padding:18px 24px;">
-<span style="font-family:${FONT_DISPLAY};font-size:24px;line-height:26px;letter-spacing:0.02em;text-transform:uppercase;color:${EMAIL_COLORS.paper};">Dock One<span style="color:${EMAIL_COLORS.violet};">_</span></span><br>
-<span style="font-family:${FONT_MONO};font-size:9px;letter-spacing:0.42em;text-transform:uppercase;color:${EMAIL_COLORS.nightMute};">Solutions</span>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
+<td style="padding:0 12px 0 0;vertical-align:middle;"><img src="${esc(LOGO_ICON)}" width="36" height="36" alt="" style="display:block;width:36px;height:36px;border:0;outline:none;"></td>
+<td style="vertical-align:middle;"><span style="font-family:${FONT_DISPLAY};font-size:24px;line-height:26px;letter-spacing:0.02em;text-transform:uppercase;color:${EMAIL_COLORS.paper};">Dock One<span style="color:${EMAIL_COLORS.violet};">_</span></span><br>
+<span style="font-family:${FONT_MONO};font-size:9px;letter-spacing:0.42em;text-transform:uppercase;color:${EMAIL_COLORS.nightMute};">Solutions</span></td>
+</tr></table>
 </td></tr>
 <tr><td style="background:${EMAIL_COLORS.lime};height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>
 <tr><td style="background:${EMAIL_COLORS.surface};border:1px solid ${EMAIL_COLORS.line};border-top:0;padding:28px 24px 12px;">

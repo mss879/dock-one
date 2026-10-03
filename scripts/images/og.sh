@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Renders scripts/images/og-card.html (1200×630) with headless Chrome and writes the share images
-# Next.js picks up by file convention: src/app/opengraph-image.jpg and src/app/twitter-image.jpg.
+# Renders scripts/images/og-card.html (1200×630) with headless Chrome and writes the share image
+# Next.js picks up by file convention: src/app/opengraph-image.jpg. No twitter-image on purpose: X falls
+# back to og:image, and a root twitter-image would override product photos (components/seo/share-image.ts).
 # Needs Google Chrome and Python Pillow. Run from the repo root:  bash scripts/images/og.sh
 set -euo pipefail
 
@@ -31,8 +32,7 @@ from PIL import Image
 src, out = Path(sys.argv[1]), Path(sys.argv[2])
 im = Image.open(src).convert("RGB")
 assert im.size == (1200, 630), im.size
-for name in ("opengraph-image.jpg", "twitter-image.jpg"):
-    path = out / name
-    im.save(path, "JPEG", quality=88, optimize=True, progressive=True, subsampling=0)
-    print(f"{path}  {im.width}x{im.height}  {path.stat().st_size // 1024} KB")
+path = out / "opengraph-image.jpg"
+im.save(path, "JPEG", quality=88, optimize=True, progressive=True, subsampling=0)
+print(f"{path}  {im.width}x{im.height}  {path.stat().st_size // 1024} KB")
 PY

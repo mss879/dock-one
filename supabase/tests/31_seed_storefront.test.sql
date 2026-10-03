@@ -3,6 +3,7 @@
 -- placeholders, honest payment/pickup state, live slides/tiles for anon, blocks that name real seed
 -- products, idempotent re-runs, and a seed that never overwrites the owner's own values.
 \ir _helpers.sql
+\ir _demo_only.sql
 
 -- ── 1. store_settings ────────────────────────────────────────────────────────
 SELECT pg_temp.ok(EXISTS (SELECT 1 FROM public.app_config WHERE name = 'seed_31_storefront_demo'), 'the seed marker is recorded');

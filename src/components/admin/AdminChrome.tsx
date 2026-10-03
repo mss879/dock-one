@@ -3,6 +3,7 @@
 import { ExternalLink, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { LogoIcon } from "@/components/brand/LogoArt";
 import { site } from "@/data/site";
 import { safeAdminRedirect } from "@/lib/admin/redirect";
 import { adminToast } from "@/lib/admin/toast";
@@ -58,11 +59,7 @@ function Brand({ compact = false, onClick }: { compact?: boolean; onClick: (even
       className="flex min-w-0 items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-adm-signal"
       aria-label={`${site.name} admin — dashboard`}
     >
-      <span aria-hidden className="grid size-7 shrink-0 grid-cols-3 grid-rows-3 gap-[2px]">
-        <i className="bg-white" /> <i /> <i className="bg-adm-accent" />
-        <i /> <i className="bg-white" /> <i />
-        <i className="bg-adm-signal" /> <i /> <i className="bg-white" />
-      </span>
+      <LogoIcon className="size-8" />
       {!compact && (
         <span className="flex min-w-0 flex-col">
           <span className="display truncate text-[20px] leading-[0.95] tracking-wide text-white">{site.wordmark[0]}</span>

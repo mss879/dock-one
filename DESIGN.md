@@ -1,6 +1,6 @@
 # DESIGN.md — Dock One Solutions storefront
 
-> Phone numbers, domain and product data are placeholders. The brand constants (name, wordmark,
+> Phone numbers and product data are placeholders; the domain is https://dockonesolutions.com. The brand constants (name, wordmark,
 > description) live in `src/data/site.ts`; everything else the owner controls — products,
 > homepage banners and copy, contact details, delivery rule — lives in the Supabase database and
 > is edited in the admin panel (`/admin`). See `supabase/MIGRATION_PLAN.md`.
@@ -12,6 +12,13 @@
 - **Audience:** Sri Lankan shoppers comparing against local competitors — prices in LKR, island-wide
   delivery, cash on delivery, official warranty are the trust cues that matter.
 - **Single job of the homepage:** get a shopper from a deal or category into the basket.
+- **Logo:** the client's **DO monogram** as the icon — gold `#e6bd3f` on an ink chamfer tile
+  (`LogoIcon`, same art as the favicon) — beside the site's own wordmark: **"DOCK ONE"** in Anton
+  with the blinking violet `_` cursor over a mono **"SOLUTIONS"** label (`src/components/layout/Logo.tsx`;
+  the client preferred this tech-style type to the wordmark in their artwork). The monogram is traced
+  from `scripts/images/source/dock-one-logo.png` by `scripts/images/logo.py` into
+  `src/components/brand`; favicon, app icons and the JSON-LD logo come from `scripts/images/icons.py`,
+  the share card from `scripts/images/og.sh`.
 
 ## 2. Direction — "commerce layout, cyber-brutalist surface"
 
@@ -42,6 +49,7 @@ control stay conventional and obvious. HUD details are `aria-hidden` and never c
 | `violet-soft` | `#ebe5ff` | tinted panels |
 | `lime` | `#d4ff3a` | signal accent: discounts, status, highlights — always with `ink` text |
 | `lime-soft` | `#f0ffc0` | tinted panels |
+| `gold` | `#e6bd3f` | **the DO monogram only** (sampled from the client's artwork) — never UI, text or fills |
 | `night` / `night-2` / `night-line` / `night-mute` | `#0b0b0c` / `#151517` / `#2b2b30` / `#a1a1aa` | dark sections |
 
 No reds. Discounts are lime-on-ink, "new" is violet. One accent per element.

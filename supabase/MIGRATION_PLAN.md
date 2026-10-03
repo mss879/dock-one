@@ -71,9 +71,11 @@ simply hidden. Nothing crashes.
 | 23 | Admin catalogue tools | `23_admin_catalogue.sql` | 04, 05, 07 | Admin product editor save, collection ordering, stock lists |
 | 24 | Admin account | `24_admin_account.sql` | 02 | `/admin` for `admin@dockone.lk` (run once that account exists and is confirmed) |
 | 30–33 | **Demo content** (seeds) | `30_…`–`33_…` | the feature they fill | The approved design's content, moved into the database |
+| 34 | **Real inventory** | `34_seed_inventory.sql` | 04, 05, 30 | The client's 86 stock rows as 59 live products, prices and stock; demo catalogue hidden |
+| 35 | Inventory costs (**not in git**) | `35_seed_inventory_costs.sql` | 34 | Cost and dealer prices for those variants — admin-only |
 
 The simplest safe route is: **01 → 23 in order, then the seeds you want**, and `24` once the admin
-account exists.
+account exists. Then **34, then 35** for the real catalogue.
 
 ---
 
@@ -391,6 +393,17 @@ deleted demo rows back) and each header contains the exact statement that remove
 | `31_seed_storefront.sql` | store settings from the current site copy (phone, WhatsApp, email and address are the design's **placeholders**), 3 hero slides, 4 promo tiles, the homepage copy blocks, ticker, "We accept" labels. Claims checkout can't back (card payments, instalments, "10K+ orders", "99%", "up to 40% off", the sample testimonial) were removed, not rewritten | 01, 03, 16 (artwork uses seed 30's products) | Enter real contact details (the bank account comes from 03 and is real — this seed does not touch it); set a real flash-sale end time if you run one (the section stays hidden until then); review the homepage copy |
 | `32_seed_discounts.sql` | the one code the design already accepted: `OPENING10` (10 % off) | 08, 09 | Keep only if the offer is real; otherwise pause or delete it |
 | `33_seed_content_pages.sql` | the privacy page, published, as a **template**: it lists what this build really collects, the retention periods of 22 and the processors used; business name, address, contact email and hosting provider are `[BRACKETED]` placeholders | 01, 15 | Fill the placeholders, have it reviewed, delete the "Template" note; the retention periods hold only once the daily maintenance job (22) runs |
+
+### Real inventory (34–35)
+
+Generated from the client's handoff workbook by `scripts/db/inventory/build_seed.py` (re-run it if
+the workbook changes; never hand-edit the SQL). Every price, cost and quantity is read from the
+workbook cell.
+
+| File | Fills | Needs | After running |
+| --- | --- | --- | --- |
+| `34_seed_inventory.sql` | 5 new departments (Monitors, Audio, Power & Charging, Cameras & Instax, Networking & Components; "Mice" → "Mice & Mousepads"); 59 products / 86 variants — colour, size, capacity, switch and GPU rows grouped as variants of one product; price = "Final Selling" (a range uses the **lower** figure, the range is kept); stock = "Quantity"; brand excerpts as highlights. Adds two **admin-only** tables, `product_sourcing` (brand title, brand page, review notes incl. HOLD items) and `variant_sourcing` (workbook row, original text, colour, dealer price, price note). Switches the 16 demo products and 4 demo collections **off** (not deleted) | 04, 05, 30 | Add photos and descriptions (admin → Products); review the HOLD notes (query in the file's ops note); set new / best-seller / flash-deal flags and featured collections so the homepage sections fill again |
+| `35_seed_inventory_costs.sql` | "Cost per unit" → `product_costs`, "Dealer Selling" → `variant_sourcing.dealer_price` | 34 | — . **Git-ignored**: the repo is public and these are the client's margins. Keep the file safe outside the repo |
 
 ---
 

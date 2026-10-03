@@ -19,6 +19,8 @@ export async function SiteJsonLd() {
     "@id": `${siteUrl}/#organization`,
     name: settings.storeName || site.name,
     url: absoluteUrl("/"),
+    // The client's logo as supplied (gold on ink), 512px square — scripts/images/icons.py.
+    logo: { "@type": "ImageObject", url: absoluteUrl("/brand/dock-one-logo-512.png"), width: 512, height: 512 },
   };
   if (settings.email) data.email = settings.email;
   if (settings.phone) data.telephone = settings.phone;

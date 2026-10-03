@@ -113,7 +113,9 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.site_lock',              ARRAY['anon', 'authenticated'], '18_site_lock'),
   ('public.assistant_sessions',      ARRAY['anon'],                  '19_assistant_core'),
   ('public.assistant_messages',      ARRAY['anon'],                  '19_assistant_core'),
-  ('public.assistant_order_lookups', ARRAY['anon'],                  '21_assistant_memory_lookup');
+  ('public.assistant_order_lookups', ARRAY['anon'],                  '21_assistant_memory_lookup'),
+  ('public.product_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
+  ('public.variant_sourcing',        ARRAY['anon'],                  '34_seed_inventory');
 
 -- ── the lists themselves are valid ──────────────────────────────────────────
 SELECT pg_temp.eq((SELECT string_agg(fn || ' (' || migration || ')', ', ' ORDER BY fn)

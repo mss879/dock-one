@@ -4,6 +4,7 @@
 -- SKUs, stock, costs, ratings); specs hold only facts written in the spec line or the name;
 -- re-running is a no-op and the header's delete statement removes the demo cleanly.
 \ir _helpers.sql
+\ir _demo_only.sql
 
 CREATE TEMP TABLE design (art text, slug text, category text, price numeric, compare_at numeric, sort_order int, attributes jsonb);
 INSERT INTO design VALUES

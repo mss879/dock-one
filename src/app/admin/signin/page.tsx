@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LogoIcon } from "@/components/brand/LogoArt";
 import { site } from "@/data/site";
 import { getAdminIdentity, getSessionUser } from "@/lib/auth";
 import { safeAdminRedirect } from "@/lib/admin/redirect";
@@ -35,11 +36,7 @@ export default async function AdminSignInPage({ searchParams }: Props) {
       <main className="flex flex-1 items-center justify-center px-4 py-10">
         <div className="w-full max-w-[400px]">
           <div className="mb-6 flex items-center gap-3">
-            <span aria-hidden className="grid size-8 shrink-0 grid-cols-3 grid-rows-3 gap-[2px]">
-              <i className="bg-adm-ink" /> <i /> <i className="bg-adm-accent" />
-              <i /> <i className="bg-adm-ink" /> <i />
-              <i className="bg-adm-signal outline-1 outline-adm-ink/20" /> <i /> <i className="bg-adm-ink" />
-            </span>
+            <LogoIcon className="size-9" />
             <span className="flex flex-col">
               <span className="display text-[24px] leading-[0.95] tracking-wide">{site.wordmark[0]}</span>
               <span className="font-mono text-[9px] leading-none tracking-[0.42em] text-adm-mute uppercase">Admin</span>

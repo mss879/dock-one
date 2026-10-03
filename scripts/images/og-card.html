@@ -1,6 +1,7 @@
 <!doctype html>
 <!--
-  Share card (Open Graph / X) — 1200×630, the homepage hero image with the brand lock-up.
+  Share card (Open Graph / X) — 1200×630, the homepage hero image with the logo: the client's DO
+  icon (src/app/icon.svg) beside the site's "DOCK ONE_" wordmark.
   Copy is the brand constants only (src/data/site.ts title + description), never a time-limited
   hero slide, so the card does not go stale. Rendered to src/app/opengraph-image.jpg and
   twitter-image.jpg by scripts/images/og.sh.
@@ -29,8 +30,7 @@
 
   .copy { position:absolute; left:64px; top:56px; bottom:56px; width:600px; display:flex; flex-direction:column; }
   .logo { display:flex; align-items:center; gap:16px; }
-  .mark { display:grid; grid-template-columns:repeat(3, 14px); grid-template-rows:repeat(3, 14px); gap:3.5px; }
-  .mark i { display:block; }
+  .logo .icon { width:56px; height:56px; display:block; }
   .wm-1 { white-space:nowrap; font-family:Anton, sans-serif; font-size:40px; line-height:0.95; letter-spacing:0.025em; text-transform:uppercase; }
   .wm-1 b { font-weight:400; color:var(--violet); }
   .wm-2 { font-size:13px; line-height:1; letter-spacing:0.42em; color:var(--mute); margin-top:4px; }
@@ -57,11 +57,7 @@
 
     <div class="copy">
       <div class="logo">
-        <span class="mark">
-          <i style="background:var(--paper)"></i><i></i><i style="background:var(--violet)"></i>
-          <i></i><i style="background:var(--paper)"></i><i></i>
-          <i style="background:var(--lime)"></i><i></i><i style="background:var(--paper)"></i>
-        </span>
+        <img class="icon" src="../../src/app/icon.svg" alt="">
         <span>
           <span class="wm-1" style="display:block">Dock One<b>_</b></span>
           <span class="wm-2 label" style="display:block">Solutions</span>
