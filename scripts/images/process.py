@@ -16,7 +16,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 RAW = os.path.join(HERE, "raw")
 PUB = os.path.join(ROOT, "public", "images")
 MANIFEST = os.path.join(ROOT, "src", "data", "image-manifest.json")
-PRODUCT_PREFIXES = ("lap-", "sto-", "key-", "mou-")
+PRODUCT_PREFIXES = ("lap-", "sto-", "key-", "mou-", "mon-", "aud-", "pow-", "cam-", "net-")
 
 _session = None
 

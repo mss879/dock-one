@@ -157,6 +157,66 @@
       "ar": "16:9",
       "bg": "none",
       "prompt": "Wide product banner with a soft pale lime-green seamless background. On the right side a matte black ergonomic wireless mouse sits at a three-quarter angle with a soft shadow beneath. The entire left half of the frame is clean empty pale lime-green negative space. Bright airy studio lighting, photorealistic premium advertising photography, no text, no letters, no logos"
+    },
+    {
+      "id": "stage-monitors",
+      "ar": "1:1",
+      "bg": "none",
+      "prompt": "Empty product display stage with nothing on it: a dark graphite brutalist room with tall vertical slabs, thin glowing violet light strips running up the walls, a flat empty black plinth in the lower centre, polished dark concrete floor with soft violet reflections, faint haze, cinematic moody lighting, photorealistic 3D render, no products, no objects on the plinth, no text, no logos"
+    },
+    {
+      "id": "stage-audio",
+      "ar": "1:1",
+      "bg": "none",
+      "prompt": "Empty product display stage with nothing on it: a vivid electric violet studio set with concentric circular ripples rising from the floor like frozen sound waves, a flat empty violet cylinder plinth in the lower centre, soft violet gradient backdrop, crisp shadows, minimalist set design, photorealistic 3D render, no products, no objects on the plinth, no text, no logos"
+    },
+    {
+      "id": "stage-power-charging",
+      "ar": "1:1",
+      "bg": "none",
+      "prompt": "Empty product display stage with nothing on it: an acid lime-green and graphite studio set, lime-coloured blocks with thin dark grooves like circuit traces, a flat empty graphite plinth in the lower centre, seamless pale lime backdrop, crisp hard shadows, minimalist brutalist set design, photorealistic 3D render, no products, no objects on the plinth, no text, no logos"
+    },
+    {
+      "id": "stage-cameras",
+      "ar": "1:1",
+      "bg": "none",
+      "prompt": "Empty product display stage with nothing on it: an off-white paper studio set with stacked pale cubes and a large soft circular arch, a flat empty white plinth in the lower centre, warm soft daylight from the side, gentle shadows, one tiny violet cube, minimalist architectural set design, photorealistic 3D render, no products, no objects on the plinth, no text, no logos"
+    },
+    {
+      "id": "stage-components",
+      "ar": "1:1",
+      "bg": "none",
+      "prompt": "Empty product display stage with nothing on it: a light-gray concrete landscape of low rectangular blocks laid out like a circuit board seen at an angle, thin channels between them, a flat empty concrete plinth in the lower centre, soft overcast light, pale gray sky, one tiny acid lime-green block, photorealistic 3D render, no products, no objects on the plinth, no text, no logos"
+    },
+    {
+      "id": "mon-01",
+      "ar": "1:1",
+      "bg": "gray",
+      "prompt": "Professional e-commerce product photograph of one 27-inch flat gaming monitor with ultra-thin bezels on a slim matte black stand, three-quarter front view facing left, screen showing an abstract dark wallpaper with a glowing violet and acid-lime gradient wave, exactly one monitor"
+    },
+    {
+      "id": "aud-01",
+      "ar": "1:1",
+      "bg": "white",
+      "prompt": "Professional e-commerce product photograph of one pair of matte black over-ear wireless headphones with soft cushioned ear cups and a padded headband, three-quarter view, exactly one pair, no cable"
+    },
+    {
+      "id": "pow-01",
+      "ar": "1:1",
+      "bg": "white",
+      "prompt": "Professional e-commerce product photograph of one slim rectangular portable power bank in matte graphite with a small row of four LED dots and a short coiled USB-C cable beside it, three-quarter view from above, exactly one power bank"
+    },
+    {
+      "id": "cam-01",
+      "ar": "1:1",
+      "bg": "white",
+      "prompt": "Professional e-commerce product photograph of one compact instant film camera in pastel lavender with a round lens, a small flash window and a printed blank instant photo sticking out of the top slot, three-quarter front view, exactly one camera"
+    },
+    {
+      "id": "net-01",
+      "ar": "1:1",
+      "bg": "gray",
+      "prompt": "Professional e-commerce product photograph of one desktop DDR5 RAM memory module with a matte black aluminium heat spreader and a thin violet light bar along the top edge, standing at a tilted three-quarter angle, exactly one module"
     }
   ]
 }
