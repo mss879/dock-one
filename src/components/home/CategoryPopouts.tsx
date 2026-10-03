@@ -22,6 +22,18 @@ const POSES: Record<string, Pose> = {
 };
 const DEFAULT_POSE: Pose = { width: "86%", bottom: "42%", rotate: "-8deg" };
 
+/**
+ * The original category cut-outs (public/images/cutouts). They front the card whenever the category's
+ * hero product is unset or switched off — the demo products they came from are inactive since the
+ * real inventory import (34), which had left these four cards with an empty stage.
+ */
+const CATEGORY_ART: Record<string, string> = {
+  laptops: "/images/cutouts/lap-02.webp",
+  storage: "/images/cutouts/sto-01.webp",
+  keyboards: "/images/cutouts/key-01.webp",
+  mice: "/images/cutouts/mou-01.webp",
+};
+
 /** Light stages (paper, lime) take the ink gradient and ink HUD text. */
 const LIGHT_SCENES = new Set(["paper", "lime"]);
 
@@ -37,6 +49,7 @@ export function CategoryPopouts({ categories, index }: { categories: Category[];
           const light = LIGHT_SCENES.has(category.scene);
           const count = category.productCount === null ? null : `${category.productCount} ${category.productCount === 1 ? "item" : "items"}`;
           const hero = category.hero;
+          const cutout = hero?.cutoutUrl ?? CATEGORY_ART[category.id] ?? null;
           return (
             <li key={category.id}>
               {/* top padding is the room the product breaks out into */}
@@ -69,13 +82,13 @@ export function CategoryPopouts({ categories, index }: { categories: Category[];
 
                 {/* contact shadow + the cut-out that breaks the frame */}
                 <span aria-hidden className="absolute top-[56%] left-1/2 h-[5%] w-[56%] -translate-x-1/2 rounded-[50%] bg-black/55 blur-lg transition-transform duration-500 ease-brut group-hover:scale-x-[0.82] group-hover:opacity-70" />
-                {hero && (
+                {cutout && (
                   <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 transition-transform duration-500 ease-brut group-hover:-translate-y-3.5 group-hover:scale-[1.05]" style={{ width, bottom }}>
                     <div style={{ rotate }}>
                       <ProductImage
-                        src={hero.cutoutUrl}
-                        alt={hero.name}
-                        categoryId={hero.categoryId}
+                        src={cutout}
+                        alt=""
+                        categoryId={category.id}
                         kind="cutout"
                         decorative
                         sizes="(min-width: 1024px) 330px, 50vw"

@@ -6,15 +6,29 @@ import { telHref } from "./contact";
 import { HeaderCounters } from "./HeaderCounters";
 import { Logo } from "./Logo";
 import { MobileMenu } from "./MobileMenu";
-import { mainNav, utilityNav } from "./nav";
+import { mainNav, navGroups, utilityNav } from "./nav";
+import { NavDropdown } from "./NavDropdown";
 import { ProfileMenu } from "./ProfileMenu";
 import { SearchBar } from "./SearchBar";
 import { SysClock } from "./SysClock";
 
-/** Sticky header. Nav = Shop, the active categories (→ /shop?category=<id>), Deals, New. */
+function NavSlash() {
+  return (
+    <span aria-hidden className="px-3 text-violet xl:px-4">
+      /
+    </span>
+  );
+}
+
+/**
+ * Sticky header. Desktop nav = the active categories in hover dropdowns (navGroups), then Deals and
+ * New. The mobile menu keeps the flat list: Shop, every category, Deals, New.
+ */
 export async function Header() {
   const [categories, settings, links] = await Promise.all([getCategories(), getStoreSettings(), getFooterLinks()]);
   const nav = mainNav(categories);
+  const groups = navGroups(categories);
+  const extras = nav.slice(-2); // Deals, New
   const tel = telHref(settings.phone);
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/92 backdrop-blur-md">
@@ -23,14 +37,16 @@ export async function Header() {
         <Logo />
 
         <nav aria-label="Main" className="hidden h-full items-center border-l border-line pl-6 lg:flex">
-          <ul className="label flex items-center font-medium">
-            {nav.slice(1).map((item, i) => (
-              <li key={item.href} className="flex items-center">
-                {i > 0 && (
-                  <span aria-hidden className="px-2.5 text-violet xl:px-3.5">
-                    /
-                  </span>
-                )}
+          <ul className="label flex h-full items-center font-medium">
+            {groups.map((group, i) => (
+              <li key={group.label} className="flex h-full items-center">
+                {i > 0 && <NavSlash />}
+                <NavDropdown group={group} />
+              </li>
+            ))}
+            {extras.map((item) => (
+              <li key={item.href} className="flex h-full items-center">
+                <NavSlash />
                 <Link href={item.href} className="relative py-2 transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-ink after:transition-transform hover:text-violet-ink hover:after:scale-x-100">
                   {item.label}
                 </Link>

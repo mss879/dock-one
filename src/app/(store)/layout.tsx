@@ -6,6 +6,8 @@ import { CartDrawer } from "@/components/cart/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { TopBar } from "@/components/layout/TopBar";
+import { HomePreloader } from "@/components/preloader/HomePreloader";
+import { PRELOADER_SKIP_SCRIPT } from "@/components/preloader/skip";
 import { StoreSettingsProvider } from "@/components/providers/StoreSettingsProvider";
 import { SiteJsonLd } from "@/components/seo/SiteJsonLd";
 import { Toaster } from "@/components/ui/Toaster";
@@ -20,6 +22,9 @@ export default async function StoreLayout({ children }: { children: React.ReactN
   const settings = toPublicSettings(await getStoreSettings());
   return (
     <StoreSettingsProvider value={settings}>
+      {/* homepage preloader first, so it is the first thing painted; the script skips it if already seen */}
+      <HomePreloader />
+      <script dangerouslySetInnerHTML={{ __html: PRELOADER_SKIP_SCRIPT }} />
       <a href="#main" className="label sr-only z-[80] bg-lime px-4 py-3 font-bold focus:not-sr-only focus:fixed focus:top-2 focus:left-2">
         Skip to content
       </a>

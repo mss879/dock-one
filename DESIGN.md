@@ -102,6 +102,13 @@ CSS only, transform/opacity/filter only. Easing `cubic-bezier(0.2, 0, 0, 1)`; 15
 (sheet, lifts), 500ms (pop-out). Hero autoplay is driven by the progress bar animation (7s) and pauses on
 hover/focus. `prefers-reduced-motion`: no autoplay, no ticker, no lifts.
 
+**Homepage preloader — "Docking"** (`src/components/preloader`): ~3 s, homepage only, once per browser
+session, skipped under reduced motion. On a night grid the DO monogram's D, O and lens fly in and dock
+inside a HUD target (brackets lock lime, "STATUS: DOCKED"), the "DOCK ONE_ / SOLUTIONS" wordmark rises,
+then the screen splits open along a lime seam. It is server-rendered so it covers the first paint while
+the hero downloads underneath; the exit waits for the first hero image (capped at 4 s) and the hero
+autoplay is paused until the reveal.
+
 ## 8. Imagery
 
 Generated with Higgsfield (`z_image`, 0.15 credits each) via `scripts/images/`. Art direction: graphite /

@@ -1,0 +1,337 @@
+/*
+ * The homepage preloader (DockingPreloader.tsx). ~3 s: the intro is pure CSS from first paint;
+ * the exit (seam, fade, hatch split) starts when the component adds .is-leaving. Without JS the
+ * *-fallback exit opens the hatch at ~6.3 s. Brand tokens are repeated as literals so this file
+ * never depends on which @theme variables Tailwind emits. Prefix: pl-.
+ */
+
+@property --pl-x {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --pl-y {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+
+.pl-root {
+  --pl-ink: #0b0b0c;
+  --pl-paper: #f3f3f1;
+  --pl-line: #2b2b30;
+  --pl-mute: #a1a1aa;
+  --pl-violet: #6d3bff;
+  --pl-lime: #d4ff3a;
+  --pl-gold: #e6bd3f;
+  --pl-ease: cubic-bezier(0.2, 0, 0, 1);
+  --pl-snap: cubic-bezier(0.7, 0, 0.2, 1);
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* already played this session (or reduced motion) — set before first paint by the store layout */
+.pl-root[data-skip] {
+  display: none;
+}
+/* the hero slider waits for the reveal instead of advancing underneath */
+html:has(.pl-root:not([data-skip])) .hero-progress {
+  animation-play-state: paused;
+}
+
+.pl-hud {
+  position: absolute;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  animation: pl-flicker 0.4s steps(1) 0.15s forwards;
+}
+.pl-hud.tl { top: 20px; left: 20px; }
+.pl-hud.tr { top: 20px; right: 20px; }
+.pl-hud.bl { bottom: 20px; left: 20px; }
+.pl-hud.br { bottom: 20px; right: 20px; }
+@media (width < 40rem) {
+  .pl-hud.tr,
+  .pl-hud.br { display: none; }
+}
+
+.pl-cursor {
+  color: var(--pl-violet);
+}
+.pl-cursor.is-blinking {
+  animation: pl-blink 0.55s steps(1) infinite;
+}
+
+@keyframes pl-flicker {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  40% { opacity: 0.2; }
+  60%,
+  100% { opacity: 1; }
+}
+@keyframes pl-blink {
+  50% { opacity: 0; }
+}
+@keyframes pl-fade-out {
+  to { opacity: 0; }
+}
+@keyframes pl-show {
+  to { opacity: 1; }
+}
+@keyframes pl-hide {
+  to { opacity: 0; }
+}
+@keyframes pl-rise {
+  from { transform: translateY(105%); }
+  to { transform: translateY(0); }
+}
+
+/* ─── A · DOCKING — the monogram's parts dock into a HUD target, then the hatch splits open ─── */
+
+.pl-dock {
+  color: var(--pl-paper);
+}
+.pl-dock-half {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50.5%;
+  background-color: var(--pl-ink);
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: auto;
+  animation: pl-dock-split-fallback 0.6s var(--pl-snap) 6.3s forwards;
+}
+.pl-dock.is-leaving .pl-dock-half {
+  animation: pl-dock-split 0.6s var(--pl-snap) 0.3s forwards;
+}
+.pl-dock-half.is-top {
+  top: 0;
+  --to: -101%;
+  background-position: center bottom;
+}
+.pl-dock-half.is-bottom {
+  bottom: 0;
+  --to: 101%;
+  background-position: center top;
+}
+@keyframes pl-dock-split {
+  to { transform: translateY(var(--to)); }
+}
+@keyframes pl-dock-split-fallback {
+  to { transform: translateY(var(--to)); }
+}
+
+.pl-dock-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  animation: pl-dock-fade-fallback 0.18s linear 6.2s forwards;
+}
+.pl-dock.is-leaving .pl-dock-stage {
+  animation: pl-fade-out 0.18s linear 0.18s forwards;
+}
+@keyframes pl-dock-fade-fallback {
+  to { opacity: 0; }
+}
+.pl-dock-axis {
+  position: absolute;
+  background: var(--pl-line);
+}
+.pl-dock-axis.is-h {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: scaleX(0);
+  animation: pl-dock-axis-x 0.6s var(--pl-ease) forwards;
+}
+.pl-dock-axis.is-v {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: scaleY(0);
+  animation: pl-dock-axis-y 0.6s var(--pl-ease) 0.08s forwards;
+}
+@keyframes pl-dock-axis-x {
+  to { transform: scaleX(1); }
+}
+@keyframes pl-dock-axis-y {
+  to { transform: scaleY(1); }
+}
+
+/* the lime seam the hatch opens along */
+.pl-dock-seam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--pl-lime);
+  box-shadow: 0 0 18px var(--pl-lime);
+  transform: scaleX(0);
+}
+.pl-dock.is-leaving .pl-dock-seam {
+  animation:
+    pl-dock-axis-x 0.32s var(--pl-snap) forwards,
+    pl-fade-out 0.25s linear 0.45s forwards;
+}
+
+.pl-dock-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.pl-dock-target {
+  --mark: clamp(120px, 24vmin, 200px);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--mark) + 72px);
+  height: calc(var(--mark) * 0.673 + 72px);
+  animation: pl-dock-lock 0.4s var(--pl-ease) 1.32s;
+}
+@keyframes pl-dock-lock {
+  40% { transform: scale(0.9); }
+}
+.pl-dock-br {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 0 solid var(--pl-paper);
+  opacity: 0;
+  animation:
+    pl-dock-br-in 0.7s var(--pl-ease) 0.05s forwards,
+    pl-dock-br-lock 0.01s linear 1.32s forwards;
+}
+.pl-dock-br.tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; --fx: -36vw; --fy: -36vh; }
+.pl-dock-br.tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; --fx: 36vw; --fy: -36vh; }
+.pl-dock-br.bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; --fx: -36vw; --fy: 36vh; }
+.pl-dock-br.br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; --fx: 36vw; --fy: 36vh; }
+@keyframes pl-dock-br-in {
+  from { opacity: 0; transform: translate(var(--fx), var(--fy)); }
+  to { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes pl-dock-br-lock {
+  to { border-color: var(--pl-lime); }
+}
+
+.pl-dock-flash {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--pl-lime);
+  opacity: 0;
+  animation: pl-dock-flash 0.6s var(--pl-ease) 1.36s;
+}
+@keyframes pl-dock-flash {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.45); }
+}
+
+.pl-dock-mark {
+  width: var(--mark);
+  overflow: visible;
+  color: var(--pl-gold);
+}
+.pl-dock-mark .p-d {
+  animation: pl-dock-in-d 0.95s var(--pl-ease) 0.3s both;
+}
+.pl-dock-mark .p-o {
+  animation: pl-dock-in-o 0.95s var(--pl-ease) 0.3s both;
+}
+.pl-dock-mark .p-lens {
+  animation: pl-dock-in-lens 0.55s var(--pl-snap) 0.8s both;
+}
+@keyframes pl-dock-in-d {
+  from { transform: translateX(-420px); opacity: 0; }
+  30% { opacity: 1; }
+}
+@keyframes pl-dock-in-o {
+  from { transform: translateX(420px); opacity: 0; }
+  30% { opacity: 1; }
+}
+@keyframes pl-dock-in-lens {
+  from { transform: translateY(-260px); opacity: 0; }
+  40% { opacity: 1; }
+}
+
+.pl-dock-word {
+  margin-top: 28px;
+  text-align: center;
+}
+.pl-mask {
+  display: block;
+  overflow: hidden;
+}
+.pl-mask > span {
+  display: block;
+}
+.pl-dock-word .is-name {
+  font-family: var(--font-anton), Impact, sans-serif;
+  font-size: clamp(36px, 6vw, 60px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  animation: pl-rise 0.5s var(--pl-ease) 1.55s both;
+}
+.pl-dock-word .is-tag {
+  margin-top: 6px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.62em;
+  padding-left: 0.62em;
+  text-transform: uppercase;
+  color: var(--pl-mute);
+  animation: pl-rise 0.5s var(--pl-ease) 1.68s both;
+}
+
+.pl-dock-status {
+  display: inline-grid;
+}
+.pl-dock-status > span {
+  grid-area: 1 / 1;
+}
+.pl-dock-status .is-wait {
+  animation: pl-hide 0.01s linear 1.32s forwards;
+}
+.pl-dock-status .is-done {
+  opacity: 0;
+  color: var(--pl-lime);
+  animation: pl-show 0.01s linear 1.32s forwards;
+}
+.pl-dock-num {
+  display: inline-block;
+  min-width: 4ch;
+  text-align: right;
+}
+.pl-dock-num.is-x {
+  counter-reset: x var(--pl-x);
+  animation: pl-count-x 1.05s var(--pl-ease) 0.25s both;
+}
+.pl-dock-num.is-y {
+  counter-reset: y var(--pl-y);
+  animation: pl-count-y 1.05s var(--pl-ease) 0.25s both;
+}
+.pl-dock-num.is-x::after { content: counter(x); }
+.pl-dock-num.is-y::after { content: counter(y); }
+@keyframes pl-count-x {
+  from { --pl-x: 4096; }
+  to { --pl-x: 0; }
+}
+@keyframes pl-count-y {
+  from { --pl-y: 2160; }
+  to { --pl-y: 0; }
+}
