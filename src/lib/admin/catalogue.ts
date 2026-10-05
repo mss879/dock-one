@@ -22,7 +22,7 @@ import {
   toText,
   type SpecValue,
 } from "@/lib/catalogue-shared";
-import type { ErrorTable } from "@/lib/rpc-errors";
+import { isSchemaMismatch, type ErrorTable } from "@/lib/rpc-errors";
 import { unwrapPage, unwrapRow, unwrapRows, type AdminPage } from "./query";
 import { orIlike } from "./search";
 
@@ -31,6 +31,8 @@ import { orIlike } from "./search";
 export const CATALOGUE_MIGRATION = "04_catalogue.sql";
 export const INVENTORY_MIGRATION = "05_inventory.sql";
 export const ADMIN_CATALOGUE_MIGRATION = "23_admin_catalogue.sql";
+/** The unit register: one serial number per physical unit (product editor stock intake). */
+export const SERIALS_MIGRATION = "25_serial_numbers.sql";
 /** Products, variants, categories and collections are cached under this tag (lib/cache.ts). */
 export const CATALOGUE_TAGS: CacheTag[] = ["catalogue"];
 
@@ -138,6 +140,25 @@ export const COLLECTION_WRITE = {
 };
 
 export const COLLECTION_MEMBERS_WRITE = { ...COLLECTION_WRITE, migration: ADMIN_CATALOGUE_MIGRATION };
+
+/** admin_set_product_serials (25) — business codes and the register's constraints → copy. */
+export const SERIALS_WRITE = {
+  entity: "serial number",
+  migration: SERIALS_MIGRATION,
+  constraints: {
+    product_units_serial_key: "Another unit of this product already has that serial number.",
+    product_units_serial_valid: "Serial numbers are 1–100 characters on one line.",
+  } as Record<string, string>,
+  errors: {
+    invalid_serials: { status: 422, message: detail },
+    duplicate_serial: { status: 422, message: detail },
+    serial_taken: { status: 409, message: detail },
+    serial_sold: { status: 409, message: detail },
+    variant_not_in_product: { status: 409, message: detail },
+    product_not_found: { status: 404, message: detail },
+    not_authorised: { status: 403, message: "Only an admin can do this. Sign in again as an admin." },
+  } as ErrorTable,
+};
 
 export const INVENTORY_WRITE = {
   entity: "stock record",
@@ -533,8 +554,12 @@ export type VariantForm = {
   track: boolean;
   stock: number | null;
   threshold: number | null;
-  /** What the database had when the editor loaded (stock and cost are sent only when changed). */
-  loaded: { cost: number | null; track: boolean; stock: number | null; threshold: number | null } | null;
+  /** Serial numbers of the units in stock — one box per unit (25's register). Blanks are dropped on save. */
+  serials: string[];
+  /** Serials of this variant's units already sold (read-only: they can't be back in stock). */
+  soldSerials: string[];
+  /** What the database had when the editor loaded (stock, cost and serials are sent only when changed). */
+  loaded: { cost: number | null; track: boolean; stock: number | null; threshold: number | null; serials: string[] | null } | null;
 };
 
 export type ProductForm = {
@@ -566,6 +591,8 @@ export type ProductForm = {
   seoTitle: string;
   seoDescription: string;
   variants: VariantForm[];
+  /** The unit register exists (25 applied) — the serial boxes are shown and saved. */
+  serialsSupported: boolean;
   /** Read-only (derived by the database). */
   price: number | null;
   compareAtPrice: number | null;
@@ -591,6 +618,8 @@ export function emptyVariant(key: string, name = ""): VariantForm {
     track: false,
     stock: null,
     threshold: DEFAULT_THRESHOLD,
+    serials: [],
+    soldSerials: [],
     loaded: null,
   };
 }
@@ -623,6 +652,7 @@ export function emptyProductForm(variantKey: string): ProductForm {
     seoTitle: "",
     seoDescription: "",
     variants: [emptyVariant(variantKey, "Standard")],
+    serialsSupported: true,
     price: null,
     compareAtPrice: null,
     variantCount: 0,
@@ -635,7 +665,9 @@ export const PRODUCT_EDIT_FIELDS =
   "id, slug, brand, name, subtitle, description, category_id, price, compare_at_price, variant_count, image_urls, cutout_url, tags, attributes, warranty_months, is_active, is_new, is_bestseller, is_featured, is_flash_deal, sort_order, seo_title, seo_description, updated_at";
 const VARIANT_EDIT_FIELDS = "id, sku, name, option_values, price, compare_at_price, position, is_active, cost:product_costs(cost_price)";
 
-function variantFromRow(row: Row, stock: Row | undefined): VariantForm {
+type VariantUnits = { inStock: string[]; sold: string[] };
+
+function variantFromRow(row: Row, stock: Row | undefined, units: VariantUnits | null): VariantForm {
   const id = toNumber(row.id, 0);
   const cost = toNullableNumber(firstRow(row.cost)?.cost_price);
   const options: OptionPair[] = Object.entries(plainObject(row.option_values)).map(([name, value], index) => ({
@@ -659,13 +691,25 @@ function variantFromRow(row: Row, stock: Row | undefined): VariantForm {
     track: tracked,
     stock: level,
     threshold,
-    loaded: { cost, track: tracked, stock: level, threshold: tracked ? threshold : null },
+    serials: units ? [...units.inStock] : [],
+    soldSerials: units ? [...units.sold] : [],
+    loaded: { cost, track: tracked, stock: level, threshold: tracked ? threshold : null, serials: units ? [...units.inStock] : null },
   };
 }
 
-export function productFormFromRows(product: Row, variants: Row[], stock: Row[]): ProductForm {
+/** `units` = the product's rows of 25's register, or null when the register doesn't exist yet. */
+export function productFormFromRows(product: Row, variants: Row[], stock: Row[], units: Row[] | null = null): ProductForm {
   const attributes = plainObject(product.attributes);
   const stockByVariant = new Map<number, Row>(stock.map((row) => [toNumber(row.variant_id, 0), row]));
+  const unitsByVariant = new Map<number, VariantUnits>();
+  for (const unit of units ?? []) {
+    const id = toNumber(unit.variant_id, 0);
+    const entry = unitsByVariant.get(id) ?? { inStock: [], sold: [] };
+    const serial = typeof unit.serial_number === "string" ? unit.serial_number : "";
+    if (unit.status === "sold") entry.sold.push(serial);
+    else entry.inStock.push(serial);
+    unitsByVariant.set(id, entry);
+  }
   return {
     id: toNumber(product.id, 0),
     slug: String(product.slug ?? ""),
@@ -692,7 +736,10 @@ export function productFormFromRows(product: Row, variants: Row[], stock: Row[])
     sortOrder: toNullableNumber(product.sort_order) ?? 100,
     seoTitle: toText(product.seo_title, 120) ?? "",
     seoDescription: toText(product.seo_description, 320) ?? "",
-    variants: variants.map((row) => variantFromRow(row, stockByVariant.get(toNumber(row.id, 0)))),
+    variants: variants.map((row) =>
+      variantFromRow(row, stockByVariant.get(toNumber(row.id, 0)), units === null ? null : (unitsByVariant.get(toNumber(row.id, 0)) ?? { inStock: [], sold: [] })),
+    ),
+    serialsSupported: units !== null,
     price: toNullableNumber(product.price),
     compareAtPrice: toNullableNumber(product.compare_at_price),
     variantCount: toNumber(product.variant_count, 0),
@@ -710,10 +757,37 @@ export async function fetchProductForEdit(supabase: SupabaseClient, id: number, 
     variantQuery = variantQuery.abortSignal(signal);
     stockQuery = stockQuery.abortSignal(signal);
   }
-  const [product, variants, stock] = await Promise.all([productQuery.maybeSingle(), variantQuery, stockQuery]);
+  let unitQuery = supabase.from("product_units").select("variant_id, serial_number, status").eq("product_id", id).order("id").range(0, 4999);
+  if (signal) unitQuery = unitQuery.abortSignal(signal);
+  const [product, variants, stock, units] = await Promise.all([productQuery.maybeSingle(), variantQuery, stockQuery, unitQuery]);
   const row = unwrapRow<Row>(product, CATALOGUE_MIGRATION);
   if (!row) return null;
-  return productFormFromRows(row, unwrapRows<Row>(variants, CATALOGUE_MIGRATION), unwrapRows<Row>(stock, INVENTORY_MIGRATION));
+  // The register (25) is optional: before it is applied the editor simply has no serial boxes.
+  const unitRows = units.error && isSchemaMismatch(units.error) ? null : unwrapRows<Row>(units, SERIALS_MIGRATION);
+  return productFormFromRows(row, unwrapRows<Row>(variants, CATALOGUE_MIGRATION), unwrapRows<Row>(stock, INVENTORY_MIGRATION), unitRows);
+}
+
+/** A variant's serials as saved: trimmed, blanks dropped, entry order kept. */
+export function cleanSerialList(serials: readonly string[]): string[] {
+  return serials.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * admin_set_product_serials arguments (25): the variants whose in-stock serials changed, by the
+ * ids admin_save_product returned (in list order). Untracked variants are left alone.
+ */
+export function buildSerialSave(form: ProductForm, savedVariantIds: readonly number[]): { variant_id: number; serials: string[] }[] {
+  if (!form.serialsSupported) return [];
+  const out: { variant_id: number; serials: string[] }[] = [];
+  form.variants.forEach((v, index) => {
+    const id = savedVariantIds[index] ?? v.id;
+    if (!id || !v.track) return;
+    const serials = cleanSerialList(v.serials);
+    const before = v.loaded?.serials ?? null;
+    const changed = before === null ? serials.length > 0 : JSON.stringify(serials) !== JSON.stringify(before);
+    if (changed) out.push({ variant_id: id, serials });
+  });
+  return out;
 }
 
 // ── Validation (mirrors 04/05/23 so the admin sees problems before saving) ────
@@ -721,7 +795,7 @@ export async function fetchProductForEdit(supabase: SupabaseClient, id: number, 
 export type ProductErrors = {
   fields: Partial<Record<"name" | "slug" | "brand" | "subtitle" | "description" | "seoTitle" | "seoDescription" | "warrantyMonths" | "sortOrder" | "variants", string>>;
   /** keyed by VariantForm.key, then field */
-  variants: Record<string, Partial<Record<"name" | "sku" | "price" | "compareAtPrice" | "cost" | "stock" | "threshold" | "options", string>>>;
+  variants: Record<string, Partial<Record<"name" | "sku" | "price" | "compareAtPrice" | "cost" | "stock" | "threshold" | "options" | "serials", string>>>;
   count: number;
 };
 
@@ -749,6 +823,9 @@ export function validateProductForm(form: ProductForm): ProductErrors {
   if (form.variants.length > MAX_VARIANTS) fields.variants = `At most ${MAX_VARIANTS} variants.`;
   const names = new Map<string, number>();
   const skus = new Map<string, number>();
+  const serialCount = new Map<string, number>(); // UPPER → in how many boxes across the product
+  const soldSerials = new Set(form.variants.flatMap((v) => v.soldSerials.map((s) => s.toUpperCase())));
+  for (const v of form.variants) if (v.track) for (const s of cleanSerialList(v.serials)) serialCount.set(s.toUpperCase(), (serialCount.get(s.toUpperCase()) ?? 0) + 1);
   for (const v of form.variants) {
     names.set(trimmed(v.name).toLowerCase(), (names.get(trimmed(v.name).toLowerCase()) ?? 0) + 1);
     if (trimmed(v.sku)) skus.set(trimmed(v.sku), (skus.get(trimmed(v.sku)) ?? 0) + 1);
@@ -770,6 +847,15 @@ export function validateProductForm(form: ProductForm): ProductErrors {
     if (v.track) {
       if (v.stock !== null && (v.stock < 0 || v.stock > 1_000_000)) e.stock = "0 to 1,000,000.";
       if (v.threshold !== null && (v.threshold < 0 || v.threshold > 100_000)) e.threshold = "0 to 100,000.";
+      if (form.serialsSupported) {
+        const serials = cleanSerialList(v.serials);
+        const long = serials.find((s) => s.length > 100);
+        const twice = serials.find((s) => (serialCount.get(s.toUpperCase()) ?? 0) > 1);
+        const sold = serials.find((s) => soldSerials.has(s.toUpperCase()));
+        if (long) e.serials = "A serial number is at most 100 characters.";
+        else if (twice) e.serials = `S/N ${twice} is entered twice.`;
+        else if (sold) e.serials = `S/N ${sold} was sold already — it can't be back in stock (cancel that order or void that invoice instead).`;
+      }
     }
     const optionNames = new Set<string>();
     for (const pair of v.options) {
@@ -902,7 +988,7 @@ export type ProductSaveResult = {
 /** A stable fingerprint of what would be saved — "unsaved changes?" without false alarms. */
 export function productFingerprint(form: ProductForm): string {
   const payload = buildProductSave(form);
-  return JSON.stringify([payload.p_product, payload.p_variants]);
+  return JSON.stringify([payload.p_product, payload.p_variants, form.variants.map((v) => cleanSerialList(v.serials))]);
 }
 
 // ── Categories ────────────────────────────────────────────────────────────────

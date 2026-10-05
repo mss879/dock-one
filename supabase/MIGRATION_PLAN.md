@@ -70,13 +70,16 @@ simply hidden. Nothing crashes.
 | 22 | Data retention | `22_retention.sql` | 13, 14, 17, 19, 21 | Daily clean-up of old logs (privacy promises) |
 | 23 | Admin catalogue tools | `23_admin_catalogue.sql` | 04, 05, 07 | Admin product editor save, collection ordering, stock lists |
 | 24 | Admin account | `24_admin_account.sql` | 02 | `/admin` for `admin@dockone.lk` (run once that account exists and is confirmed) |
+| 25 | Serial numbers | `25_serial_numbers.sql` | 02, 04, 07, 23 | One serial per unit: entered with the stock in Products, picked when packing a web order |
+| 26 | Invoices | `26_invoices.sql` | 05, 07, 23, 25 | Admin → Invoices: the invoice builder with live preview, numbering, stock, serials, payments |
 | 30–33 | **Demo content** (seeds) | `30_…`–`33_…` | the feature they fill | The approved design's content, moved into the database |
 | 34 | **Real inventory** | `34_seed_inventory.sql` | 04, 05, 30 | The client's 86 stock rows as 59 live products, prices and stock; demo catalogue hidden |
 | 35 | Inventory costs (**not in git**) | `35_seed_inventory_costs.sql` | 34 | Cost and dealer prices for those variants — admin-only |
 | 36 | Inventory update | `36_seed_inventory_update.sql` | 34 | The second stock list: 2 new items (awaiting prices), 3 stock corrections, details |
 
 The simplest safe route is: **01 → 23 in order, then the seeds you want**, and `24` once the admin
-account exists. Then **34, 35, 36** for the real catalogue.
+account exists. Then **34, 35, 36** for the real catalogue, and **25, then 26** for serial numbers and
+invoices (on a project that already has 01–24 and 34–36, just run 25 then 26).
 
 ---
 
@@ -378,6 +381,38 @@ account exists. Then **34, 35, 36** for the real catalogue.
 - **Right after:** read the result row. `admin` means done. `NOT AN ADMIN — …` means the account
   is missing or unconfirmed and nothing changed: fix that and run the file again.
 - **Check:** `SELECT email, is_admin FROM public.customers WHERE is_admin;` → the admins, and nobody else.
+
+### 25 — Serial numbers · `25_serial_numbers.sql`
+- **Adds:** `product_units` — one row per physical unit: its variant, its **serial number**, and
+  whether it is in stock or sold (and to which web-order line / invoice line). Stock *counts* stay
+  in `inventory` (what shoppers can buy); the units are the physical register on top.
+  `admin_set_product_serials` (the product editor's stock intake), `admin_assign_order_serials`
+  (fulfilment: which serials leave with a web-order line), and a trigger that puts a cancelled
+  order's serials back in stock.
+- **Needs:** 02, 04, 07, 23.
+- **Switches on:** admin → Products: with stock tracked, each variant shows **one serial-number box
+  per unit in stock** (set the stock to 3 → three boxes; scan or type, Enter moves to the next).
+  Admin → Orders → an order: **Serial numbers** on each line — pick the units in stock (or type a
+  serial that was never recorded) when packing; they print on the packing slip and the invoice.
+- **Right after:** existing stock has no serials yet — enter them per product when convenient
+  (nothing breaks without them).
+- **Check:** `SELECT has_table_privilege('anon', 'public.product_units', 'SELECT');` → `false`.
+
+### 26 — Invoices · `26_invoices.sql`
+- **Adds:** `invoice_settings` (one row: numbering, the header text, the ten notes, defaults —
+  filled from the client's invoice workbook), `invoices`, `invoice_items` (with one serial per
+  unit), `invoice_payments`, and the admin RPCs to save, issue, move back to draft, void, delete
+  drafts, record/delete payments, search the catalogue (by name or a scanned serial) and clients,
+  and the list's figures. Numbers are given on **issue** and never skip (INV-0001, INV-0002 …);
+  issuing can take the items out of stock (on by default; off for an invoice made from a web
+  order) and sells the listed serials; back to draft / void put both back.
+- **Needs:** 05, 07, 23, 25.
+- **Switches on:** admin → Commerce → **Invoices** (list, figures, builder with live A4 preview,
+  print / save as PDF), **Create invoice** in the order drawer, invoice search by serial number.
+- **Right after:** admin → Invoices → **Template & numbering**: set the **next number** to carry
+  on from the last paper invoice, check the address, contacts and notes.
+- **Check:** `SELECT number_prefix, next_number, cardinality(default_notes) FROM public.invoice_settings;`
+  → `INV-`, `1`, `10`.
 
 ---
 

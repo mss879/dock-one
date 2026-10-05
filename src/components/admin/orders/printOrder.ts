@@ -29,6 +29,7 @@ const STYLES = `
 .pay { margin-top: 14px; padding: 10px 12px; border: 1px solid #0b0b0c; }
 .pay table { width: auto; margin-top: 4px; }
 .pay td { border: 0; padding: 2px 16px 2px 0; }
+.sn { font-size: 9px; color: #3a3a40; }
 `;
 
 function storeBlock(settings: StoreSettings) {
@@ -63,10 +64,15 @@ function deliverTo(order: AdminOrder) {
     ${lines.map((line) => html`<p>${line}</p>`)}</div>`;
 }
 
-export function printInvoice(order: AdminOrder, items: AdminOrderItem[], settings: StoreSettings): Promise<boolean> {
+/** "S/N: A, B" under an item, when serials are assigned (25). */
+function serialLine(serials: string[] | undefined) {
+  return serials?.length ? html`<br><span class="mono sn">S/N: ${serials.join(", ")}</span>` : "";
+}
+
+export function printInvoice(order: AdminOrder, items: AdminOrderItem[], settings: StoreSettings, serialsByItem?: Map<number, string[]>): Promise<boolean> {
   const rows = items.map(
     (item) => html`<tr>
-      <td>${item.productName}${item.variantName && item.variantName !== "Standard" ? html` <span class="label">(${item.variantName})</span>` : ""}</td>
+      <td>${item.productName}${item.variantName && item.variantName !== "Standard" ? html` <span class="label">(${item.variantName})</span>` : ""}${serialLine(serialsByItem?.get(item.id))}</td>
       <td class="mono">${item.sku ?? ""}</td>
       <td class="right num">${item.quantity}</td>
       <td class="right num">${formatLKR(item.unitPrice)}</td>
@@ -98,10 +104,10 @@ export function printInvoice(order: AdminOrder, items: AdminOrderItem[], setting
   return printDocument({ title: `Invoice ${order.id} — ${settings.storeName}`, body, styles: STYLES });
 }
 
-export function printPackingSlip(order: AdminOrder, items: AdminOrderItem[], settings: StoreSettings): Promise<boolean> {
+export function printPackingSlip(order: AdminOrder, items: AdminOrderItem[], settings: StoreSettings, serialsByItem?: Map<number, string[]>): Promise<boolean> {
   const rows = items.map(
     (item) => html`<tr>
-      <td>${item.productName}${item.variantName && item.variantName !== "Standard" ? html` <span class="label">(${item.variantName})</span>` : ""}</td>
+      <td>${item.productName}${item.variantName && item.variantName !== "Standard" ? html` <span class="label">(${item.variantName})</span>` : ""}${serialLine(serialsByItem?.get(item.id))}</td>
       <td class="mono">${item.sku ?? ""}</td>
       <td class="right num">${item.quantity}</td>
       <td class="center">☐</td>

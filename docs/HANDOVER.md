@@ -34,7 +34,12 @@ Dashboard · Orders (status changes email the customer on "out for delivery" and
 payments; tracking; invoice and packing-slip printing) · Discounts · Abandoned carts · Reports (CSV
 and print) · Products (variants, stock, images, specs) · Categories · Collections · Inventory ·
 Reviews (moderation) · Customers · Inquiries (reply by email) · Subscribers (mailing-list export) ·
-Finder insights · Assistant insights · Homepage · Pages & blog · Store settings · Site lock.
+Finder insights · Assistant insights · Homepage · Pages & blog · Store settings · Site lock ·
+**Invoices** (the client's invoice layout as a live A4 preview beside the editor; products added by
+name or by scanning a unit's serial number; one serial box per unit; gapless numbers given on issue;
+stock taken on issue; payments, overdue tracking, print / save as PDF; "Create invoice" from an order) ·
+**Serial numbers** (one box per unit in stock in Products; picked per line when packing a web order;
+printed on the packing slip and invoices).
 
 ## 2. Set it up (in this order)
 
@@ -131,9 +136,9 @@ run in production mode without the Supabase URL and anon key.
 
 ## 5. How it was verified
 
-- **Database:** `scripts/db/verify.sh` — all 27 migration files applied twice (idempotent), 29 test
-  files, 1,515 checks, including privilege audits, RLS, money and stock maths, the bank account and the direct-call
-  brake.
+- **Database:** `scripts/db/verify.sh` — all 33 migration files applied twice (idempotent), 34 test
+  files, 1,732 checks, including privilege audits, RLS, money and stock maths, the bank account, the direct-call
+  brake, serial numbers (25) and invoices (26: numbering, stock, serials, payments, rounding).
 - **App:** TypeScript and ESLint clean; `next build` succeeds.
 - **End to end** against a local Supabase-shaped stack (Postgres 16 + PostgREST + an auth/storage
   stand-in, mock email capture): 76 scripted API checks (pages, basket/checkout/order/tracking,

@@ -1,8 +1,10 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
+import { SerialInputs } from "@/components/admin/serials/SerialInputs";
 import { AdminButton, Field, FieldError, IconButton, Input, MoneyInput, NumberInput, StatusBadge, Toggle } from "@/components/admin/ui";
 import {
+  cleanSerialList,
   DEFAULT_THRESHOLD,
   emptyVariant,
   MAX_OPTIONS,
@@ -16,6 +18,10 @@ import {
  * configuration is a priced row. Saved through admin_save_product (23) in ONE transaction with
  * the product. Stock and cost are only sent when they change (lib/admin/catalogue.ts
  * buildProductSave), so editing never resets stock (blueprint §11.2).
+ *
+ * Serial numbers (25): with stock tracked, the variant shows one serial-number box per unit in
+ * stock — set the stock to 3 and three boxes appear. They are saved right after the product
+ * (admin_set_product_serials) as the variant's in-stock units; sold units are listed, read-only.
  */
 export function VariantsEditor({
   variants,
@@ -24,6 +30,7 @@ export function VariantsEditor({
   showErrors,
   newKey,
   disabled = false,
+  serialsSupported = false,
 }: {
   variants: VariantForm[];
   onChange: (next: VariantForm[]) => void;
@@ -32,6 +39,8 @@ export function VariantsEditor({
   /** A fresh React key (called from event handlers only). */
   newKey: () => string;
   disabled?: boolean;
+  /** 25's unit register exists: show the serial-number boxes. */
+  serialsSupported?: boolean;
 }) {
   const update = (key: string, patch: Partial<VariantForm>) => onChange(variants.map((v) => (v.key === key ? { ...v, ...patch } : v)));
   const move = (index: number, to: number) => {
@@ -151,6 +160,10 @@ export function VariantsEditor({
                   )}
                 </div>
 
+                {serialsSupported && variant.track && (
+                  <SerialSection variant={variant} title={title} error={e.serials} disabled={disabled} onChange={(serials) => update(variant.key, { serials })} />
+                )}
+
                 <div className="border-t border-adm-line px-3 py-2.5">
                   <p className="font-mono text-[11px] font-semibold tracking-[0.06em] text-adm-ink-2 uppercase">Options</p>
                   <p className="text-xs leading-5 text-adm-mute">What makes this variant different, e.g. Memory: 16GB. Leave empty for a Standard variant.</p>
@@ -218,6 +231,68 @@ export function VariantsEditor({
           <span className="text-xs text-adm-ink">No active variant: shoppers won&apos;t see this product.</span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** One box per unit in stock; how many units have a serial; the sold ones (read-only). */
+function SerialSection({
+  variant,
+  title,
+  error,
+  disabled,
+  onChange,
+}: {
+  variant: VariantForm;
+  title: string;
+  error?: string;
+  disabled: boolean;
+  onChange: (serials: string[]) => void;
+}) {
+  const stock = Math.max(variant.stock ?? 0, 0);
+  const filled = cleanSerialList(variant.serials).length;
+  const extra = filled - stock;
+  return (
+    <div className="border-t border-adm-line px-3 py-2.5">
+      <p className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-mono text-[11px] font-semibold tracking-[0.06em] text-adm-ink-2 uppercase">Serial numbers</span>
+        <span className={`text-xs ${extra > 0 ? "font-semibold text-adm-ink" : "text-adm-mute"}`}>
+          {stock === 0 && filled === 0
+            ? "Set the stock above — one box appears per unit."
+            : extra > 0
+              ? `${filled} serials but stock is ${stock}`
+              : `${filled} of ${stock} unit${stock === 1 ? "" : "s"} recorded`}
+        </span>
+      </p>
+      <p className="mb-2 text-xs leading-5 text-adm-mute">
+        Scan or type each unit&apos;s serial number (Enter moves to the next box; pasting a list fills several). They go on invoices and are picked
+        when a web order is packed.
+      </p>
+      <SerialInputs
+        idPrefix={`variant-sn-${variant.key}`}
+        label={`Serial numbers for ${title}`}
+        values={variant.serials}
+        slots={stock}
+        disabled={disabled}
+        invalid={Boolean(error)}
+        columns={3}
+        onChange={onChange}
+      />
+      {error && <FieldError>{error}</FieldError>}
+      {extra > 0 && (
+        <p className="mt-1.5 text-xs leading-5 text-adm-ink">
+          {extra === 1 ? "One unit is" : `${extra} units are`} more than the stock: {extra === 1 ? "it" : "they"} may be waiting for a web order (pick the serial
+          when you pack that order), or clear the serials of units that have left.
+        </p>
+      )}
+      {variant.soldSerials.length > 0 && (
+        <details className="mt-1.5 text-xs text-adm-mute">
+          <summary className="cursor-pointer select-none">
+            {variant.soldSerials.length} sold unit{variant.soldSerials.length === 1 ? "" : "s"}
+          </summary>
+          <p className="mt-1 font-mono text-[11px] leading-5 break-words text-adm-ink-2">{variant.soldSerials.join(", ")}</p>
+        </details>
+      )}
     </div>
   );
 }

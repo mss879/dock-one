@@ -89,7 +89,19 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.get_assistant_customer_context(uuid,text)',                 '21_assistant_memory_lookup'),
   ('public.forget_assistant_customer(uuid)',                           '21_assistant_memory_lookup'),
   ('public.admin_save_product(jsonb,jsonb)',                           '23_admin_catalogue'),
-  ('public.admin_set_collection_products(text,integer[])',             '23_admin_catalogue');
+  ('public.admin_set_collection_products(text,integer[])',             '23_admin_catalogue'),
+  ('public.admin_set_product_serials(integer,jsonb)',                  '25_serial_numbers'),
+  ('public.admin_assign_order_serials(bigint,jsonb)',                  '25_serial_numbers'),
+  ('public.admin_save_invoice(jsonb,jsonb)',                           '26_invoices'),
+  ('public.admin_issue_invoice(integer)',                              '26_invoices'),
+  ('public.admin_revert_invoice(integer)',                             '26_invoices'),
+  ('public.admin_void_invoice(integer,text)',                          '26_invoices'),
+  ('public.admin_delete_invoice(integer)',                             '26_invoices'),
+  ('public.admin_record_invoice_payment(integer,numeric,date,text,text,text)', '26_invoices'),
+  ('public.admin_delete_invoice_payment(integer)',                     '26_invoices'),
+  ('public.admin_invoice_product_search(text,integer)',                '26_invoices'),
+  ('public.admin_invoice_client_search(text,integer)',                 '26_invoices'),
+  ('public.admin_invoice_summary()',                                   '26_invoices');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);
@@ -114,6 +126,11 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.assistant_sessions',      ARRAY['anon'],                  '19_assistant_core'),
   ('public.assistant_messages',      ARRAY['anon'],                  '19_assistant_core'),
   ('public.assistant_order_lookups', ARRAY['anon'],                  '21_assistant_memory_lookup'),
+  ('public.product_units',           ARRAY['anon'],                  '25_serial_numbers'),
+  ('public.invoice_settings',        ARRAY['anon'],                  '26_invoices'),
+  ('public.invoices',                ARRAY['anon'],                  '26_invoices'),
+  ('public.invoice_items',           ARRAY['anon'],                  '26_invoices'),
+  ('public.invoice_payments',        ARRAY['anon'],                  '26_invoices'),
   ('public.product_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
   ('public.variant_sourcing',        ARRAY['anon'],                  '34_seed_inventory');
 
@@ -218,7 +235,22 @@ INSERT INTO internal_helpers (fn, migration) VALUES
   ('public._business_window_start(integer)',               '17_analytics'),
   ('public.redact_pii(text)',                              '19_assistant_core'),
   ('public.clamp_ints(integer[],integer)',                 '19_assistant_core'),
-  ('public.clamp_labels(text[],integer,integer)',          '19_assistant_core');
+  ('public.clamp_labels(text[],integer,integer)',          '19_assistant_core'),
+  ('public._serials_from_json(text,jsonb,text,integer)',  '25_serial_numbers'),
+  ('public._unit_sold_where(product_units)',               '25_serial_numbers'),
+  ('public._invoice_line_for_order(integer,text)',         '25_serial_numbers'),
+  ('public._invoice_number(text,integer,integer)',         '26_invoices'),
+  ('public._invoice_json_date(text,jsonb,text)',           '26_invoices'),
+  ('public._invoice_json_qty(text,jsonb,text)',            '26_invoices'),
+  ('public._invoice_json_uuid(text,jsonb,text)',           '26_invoices'),
+  ('public._invoice_json_lines(text,jsonb,text,integer,integer)', '26_invoices'),
+  ('public._invoice_rs(numeric)',                          '26_invoices'),
+  ('public._invoice_recalc(integer)',                      '26_invoices'),
+  ('public._invoice_json(integer)',                        '26_invoices'),
+  ('public._invoice_take_stock(integer)',                  '26_invoices'),
+  ('public._invoice_return_stock(integer)',                '26_invoices'),
+  ('public._invoice_link_units(integer)',                  '26_invoices'),
+  ('public._invoice_release_units(integer)',               '26_invoices');
 SELECT pg_temp.eq((SELECT string_agg(fn, ', ' ORDER BY fn) FROM internal_helpers WHERE to_regprocedure(fn) IS NULL), NULL::text,
                   'every named internal helper exists');
 SELECT pg_temp.eq((SELECT string_agg(fn, ', ' ORDER BY fn) FROM internal_helpers

@@ -2178,6 +2178,127 @@ tracking off = delete (confirm first: the variant then sells without limit).
 
 ---
 
+## 25_serial_numbers.sql — one serial number per physical unit
+
+Depends on 02 (`is_admin`), 04, 07 (`order_items`), 23 (`_admin_json_int`). Admin-only.
+
+`product_units` — `id serial PK, product_id int` (always the variant's, set by trigger), `variant_id int`
+(composite FK → `product_variants (id, product_id)`, cascade), `serial_number text` (trimmed, 1–100,
+no control characters; **unique per product, any case**: `product_units_serial_key`), `status`
+(`in_stock` | `sold`), `order_item_id bigint` (FK `order_items`, SET NULL), `invoice_item_id int`
+(FK `invoice_items`, SET NULL — added by 26), `sold_at`, `created_by`, `created_at`, `updated_at`.
+An in-stock unit has no links (`product_units_links_valid`). RLS: admins SELECT; no write privilege
+for any API role — every write is an RPC. `inventory.stock_level` stays the sellable COUNT (place_order
+takes it); units are the physical register, so after a web order and before its serials are assigned,
+units in stock = stock_level + that order's quantity.
+
+| Signature | Grant | Returns |
+| --- | --- | --- |
+| `admin_set_product_serials(p_product_id int, p_variants jsonb)` | **U** (admin re-checked → 42501) | `{product_id, variants: [{variant_id, in_stock: [serials]}]}` |
+| `admin_assign_order_serials(p_order_item_id bigint, p_serials jsonb)` | **U** (admin re-checked → 42501) | `{order_item_id, order_id, serials: [...]}` |
+| `orders_release_units()` | — (trigger AFTER UPDATE OF status ON orders, → cancelled) | a cancelled order's units go back in stock (unless an invoice holds them) |
+| `product_units_normalize()` | — (trigger) | product_id from the variant, trimmed serial, updated_at |
+| `_serials_from_json`, `_unit_sold_where`, `_invoice_line_for_order` | — | internal |
+
+`admin_set_product_serials`: `p_variants = [{variant_id, serials: ["…"]}]` (variants of THIS product,
+≤ 100). For each listed variant its **in-stock** serials become exactly the list (≤ 1,000; trimmed,
+blanks dropped): missing ones deleted, new ones inserted; sold units never touched; a serial may move
+between two listed variants (its row is kept). Errors (22023): `invalid_serials`, `product_not_found`,
+`variant_not_in_product`, `duplicate_serial` (twice in the call), `serial_sold` (it was sold — text names
+the order/invoice), `serial_taken` (in stock under a variant not in the call).
+
+`admin_assign_order_serials`: the serials leaving with one web-order line, ≤ its quantity (`[]` clears).
+Kept if already on the line; an in-stock unit of the line's variant → SOLD to the line; an unrecorded
+serial → recorded as sold to the line; serials taken off → back in stock (or still sold when an invoice
+holds them). Errors (22023): `order_item_not_found`, `order_cancelled`, `item_unlinked` (product deleted),
+`too_many_serials`, `duplicate_serial`, `serial_other_variant`, `serial_sold` (another order / invoice —
+except an invoice made for this same order). Lock order: the order row → units by id.
+
+TypeScript: `src/lib/admin/serials.ts` (`fetchUnitsForProducts`, `fetchOrderUnits`, `serialState`,
+`ORDER_SERIALS_WRITE`), `src/lib/admin/catalogue.ts` (`buildSerialSave`, `SERIALS_WRITE`; the product
+editor calls `admin_set_product_serials` right after `admin_save_product`, with the returned variant ids).
+
+## 26_invoices.sql — invoices (admin → Commerce → Invoices)
+
+Depends on 01, 02, 04, 05 (`inventory`), 07 (`orders`), 23 (field readers), 25 (`product_units`; adds
+its `invoice_item_id` FK). Admin-only; anon has no privilege on any of it.
+
+Tables (RLS: admins SELECT; `invoice_settings` admins UPDATE too; no other write privilege — RPCs only):
+- `invoice_settings` — singleton (`id boolean PK CHECK (id)`): `number_prefix` (≤ 12, `^[A-Za-z0-9/#._-]*$`),
+  `number_digits` 1–10, `next_number` ≥ 1, `address_lines text[]` (≤ 4 × 120), `phone`, `email`,
+  `website`, `default_due_days` (0–365 or NULL), `default_payment_terms`, `default_notes text[]`
+  (≤ 20 × 500), `default_tax_rate` 0–100, `default_deduct_stock`, `default_show_bank_details`,
+  `closing_title`, `closing_line`, `footer_tagline`, `updated_at`, `updated_by`. Seeded once with the
+  client workbook's header and ten notes. Constraints: `invoice_settings_numbering_valid`,
+  `_text_lengths`, `_email_valid`, `_defaults_valid`, `_lists_valid`.
+- `invoices` — `id serial`, `number` (unique, NULL until first issued), `status` draft|issued|void,
+  `payment_status` unpaid|partial|paid (derived), `issue_date`, `due_date` (≥ issue_date),
+  `reference`, `order_id` (FK orders), `customer_id` (FK customers), `bill_to_name/_address/_city/
+  _postal_code/_phone/_email`, `payment_terms`, `notes text[]`, `show_bank_details`,
+  `discount_type/_value`, `tax_type/_value` (amount|percent; percent ≤ 100), derived money
+  `subtotal, discount_amount, tax_amount, total, amount_paid, balance_due, item_count`,
+  `serial_search` (every line's serials, for list search), `deduct_stock`, `stock_deducted`,
+  `internal_note`, `issued_at`, `voided_at`, `void_reason`, `created_by`, timestamps.
+- `invoice_items` — `id serial`, `invoice_id` (cascade), `position`, `product_id`, `variant_id`
+  (SET NULL), `description`, `serial_numbers text[]` (≤ one per whole unit, ≤ 100 chars each),
+  `warranty`, `quantity numeric(10,2)` (> 0, ≤ 100,000), `unit_price` (0–100,000,000), `amount`,
+  `stock_taken` (units this line took).
+- `invoice_payments` — `id serial`, `invoice_id`, `amount` > 0, `paid_on` date, `method`
+  cash|bank_transfer|card|cheque|online|other, `reference`, `note`, `created_by`, `created_at`.
+
+Money (`_invoice_recalc`, the only writer): line = round(qty × price, 2); discount = amount capped at
+the subtotal, or round(subtotal × % / 100, 2); tax = round((subtotal − discount) × % / 100, 2) or an
+amount; total = subtotal − discount + tax; balance = max(total − paid, 0). `src/lib/admin/invoices.ts`
+`computeTotals` mirrors it in integer cents (BigInt).
+
+| Signature | Grant | Returns |
+| --- | --- | --- |
+| `admin_save_invoice(p_invoice jsonb, p_items jsonb DEFAULT NULL)` | **U** | `{invoice, items, payments, created}` |
+| `admin_issue_invoice(p_invoice_id int)` | **U** | `{invoice, items, payments}` |
+| `admin_revert_invoice(p_invoice_id int)` | **U** | same |
+| `admin_void_invoice(p_invoice_id int, p_reason text DEFAULT NULL)` | **U** | same |
+| `admin_delete_invoice(p_invoice_id int)` | **U** | `{deleted_id}` |
+| `admin_record_invoice_payment(p_invoice_id int, p_amount numeric, p_paid_on date, p_method text, p_reference text DEFAULT NULL, p_note text DEFAULT NULL)` | **U** | `{invoice, items, payments}` |
+| `admin_delete_invoice_payment(p_payment_id int)` | **U** | same |
+| `admin_invoice_product_search(p_term text, p_limit int DEFAULT 12)` | **U** | rows `variant_id, product_id, product_name, brand, variant_name, variant_count, sku, price, image_url, warranty_months, category_name, product_is_active, variant_is_active, tracked, stock_level, exact_sku, serial_number, units_in_stock` |
+| `admin_invoice_client_search(p_term text, p_limit int DEFAULT 8)` | **U** | rows `source (invoice|customer), customer_id, name, address, city, postal_code, phone, email, last_invoiced_at, invoice_count` |
+| `admin_invoice_summary()` | **U** | `{today, outstanding_count/_total, overdue_count/_total, draft_count, issued_30d_count/_total, received_30d_total}` |
+| `_invoice_number, _invoice_json_date/_qty/_uuid/_lines, _invoice_rs, _invoice_recalc, _invoice_json, _invoice_take_stock, _invoice_return_stock, _invoice_link_units, _invoice_release_units`, `invoice_settings_touch()` | — | internal / trigger |
+
+`admin_save_invoice`: no `id` = create a draft (absent keys start from `invoice_settings`); with `id` =
+update only the keys present; `expected_updated_at` refuses a stale copy (`invoice_changed`). Keys:
+`id, expected_updated_at, issue_date, due_date, reference, order_id, customer_id, bill_to_*, payment_terms,
+notes[], show_bank_details, discount_type, discount_value, tax_type, tax_value, deduct_stock,
+internal_note`; derived keys refused. `p_items` NULL = untouched, else the complete list (≤ 200) of
+`{variant_id?, product_id?, description, serial_numbers?, warranty?, quantity, unit_price}` (a variant's
+product is taken from the variant; one serial per invoice). DRAFT: lines replaced. ISSUED: same line ids,
+only description / serial_numbers / warranty / order change (serials re-matched); issue_date, order_id,
+discount, tax and deduct_stock must be unchanged (`invoice_locked`). VOID: refused.
+
+`admin_issue_invoice`: needs the client's name and ≥ 1 line; takes stock when `deduct_stock` (whole
+units of tracked variants; `insufficient_stock`, `invalid_quantity`), sells the listed serials
+(`_invoice_link_units`: in-stock unit of the line's variant → sold to the line; a unit sold to a line of
+the invoice's own web order → also held; elsewhere → `serial_sold`; another variant →
+`serial_other_variant`; unrecorded → printed only), then — first time only — the next free number
+under the settings row lock (numbers in use are skipped; a refusal uses no number). `admin_revert_invoice`
+(no payments) and `admin_void_invoice` (numbered; no payments) return the stock and the serials.
+`admin_delete_invoice`: never-numbered drafts only (`invoice_numbered`). Payments: issued only, > 0,
+≤ balance (`overpayment`), dated today or earlier (Sri Lanka).
+
+Errors (22023, `code:text` — show the text): `invalid_invoice`, `invalid_item`, `invalid_payment`,
+`invoice_not_found`, `invoice_changed`, `invoice_locked`, `invoice_void`, `invoice_incomplete`,
+`invoice_already_issued`, `invoice_not_issued`, `invoice_numbered`, `invoice_has_payments`,
+`invalid_quantity`, `insufficient_stock`, `overpayment`, `payment_not_found`, `invoice_settings_missing`,
+`duplicate_serial`, `too_many_serials`, `serial_sold`, `serial_other_variant`; 42501 `not_authorised`;
+CHECK/FK names as listed above. Lock order: invoice row → inventory (product_id, variant_id) → units by
+id → settings row.
+
+TypeScript: `src/lib/admin/invoices.ts` (form model, `buildInvoiceSave`, `validateInvoiceForm`,
+`INVOICE_WRITE` / `INVOICE_STOCK_WRITE`, reads), `src/components/admin/invoices/*` (builder, preview,
+`invoice-document.ts` — the one renderer for preview and print), `src/components/admin/tabs/InvoicesTab.tsx`.
+
+---
+
 ## 30_seed_catalogue.sql — DEMO catalogue (replace or delete before launch)
 
 The approved design's placeholder catalogue moved into the database **and nothing more** (owner's

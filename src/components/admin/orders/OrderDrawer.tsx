@@ -1,6 +1,7 @@
 "use client";
 
-import { Printer } from "lucide-react";
+import { FilePlus2, Printer, ScanBarcode } from "lucide-react";
+import { AssignSerialsDialog, type AssignTarget } from "@/components/admin/serials/AssignSerialsDialog";
 import { useState } from "react";
 import {
   AdminButton,
@@ -18,7 +19,9 @@ import {
 } from "@/components/admin/ui";
 import { adminApi } from "@/lib/admin/api";
 import { unwrapRow, unwrapRows, useAdminQuery } from "@/lib/admin/query";
+import { fetchOrderUnits, SERIALS_MIGRATION } from "@/lib/admin/serials";
 import { adminToast } from "@/lib/admin/toast";
+import { setAdminParams } from "@/lib/admin/url";
 import {
   FULFILLMENT_LABELS,
   allowedPaymentTargets,
@@ -73,6 +76,7 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
   const [tracking, setTracking] = useState<{ number: string; url: string; note: string } | null>(null);
   const [savingTracking, setSavingTracking] = useState(false);
   const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<AssignTarget | null>(null);
 
   const detail = useAdminQuery<Detail>(
     async ({ supabase, signal }) => {
@@ -93,8 +97,19 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
   const items = order ? (detail.data?.items ?? []) : [];
   const timeline = order ? (detail.data?.timeline ?? []) : [];
 
+  // Serial numbers (25): what each line holds and what's on the shelf for its variants.
+  const unitsQuery = useAdminQuery(({ supabase, signal }) => fetchOrderUnits(supabase, items, signal), ["order-units", orderId, items.map((i) => i.id)], {
+    enabled: Boolean(order) && items.length > 0,
+    migration: SERIALS_MIGRATION,
+  });
+  const serialsSupported = unitsQuery.data?.supported === true;
+  const serialsByItem = unitsQuery.data?.byItem ?? new Map<number, string[]>();
+  const trackable = items.filter((i) => i.variantId != null && i.productId != null);
+  const unitsMissing = trackable.reduce((n, i) => n + Math.max(i.quantity - (serialsByItem.get(i.id)?.length ?? 0), 0), 0);
+
   const refresh = () => {
     detail.refetch();
+    unitsQuery.refetch();
     onChanged();
   };
 
@@ -148,11 +163,19 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
       headerActions={
         order ? (
           <>
-            <AdminButton size="sm" icon={<Printer aria-hidden className="size-3.5" />} onClick={() => void printInvoice(order, items, settings)}>
+            <AdminButton size="sm" icon={<Printer aria-hidden className="size-3.5" />} onClick={() => void printInvoice(order, items, settings, serialsByItem)}>
               Invoice
             </AdminButton>
-            <AdminButton size="sm" icon={<Printer aria-hidden className="size-3.5" />} onClick={() => void printPackingSlip(order, items, settings)}>
+            <AdminButton size="sm" icon={<Printer aria-hidden className="size-3.5" />} onClick={() => void printPackingSlip(order, items, settings, serialsByItem)}>
               Packing slip
+            </AdminButton>
+            <AdminButton
+              size="sm"
+              icon={<FilePlus2 aria-hidden className="size-3.5" />}
+              title="A formal invoice in the store's own layout, filled from this order (Invoices tab)"
+              onClick={() => setAdminParams({ tab: "invoices", invoice: "new", from_order: order.id }, { reset: true })}
+            >
+              Create invoice
             </AdminButton>
           </>
         ) : undefined
@@ -221,6 +244,11 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
           </SectionCard>
 
           <SectionCard title={`Items (${items.length})`} padded={false}>
+            {serialsSupported && !cancelled && unitsMissing > 0 && ["processing", "accepted", "fulfilled"].includes(order.status) && (
+              <AdminNotice tone="info" className="m-3 mb-0">
+                {unitsMissing} unit{unitsMissing === 1 ? " needs" : "s need"} a serial number before this order leaves — use “Serial numbers” on each line.
+              </AdminNotice>
+            )}
             <table className="w-full text-sm">
               <caption className="sr-only">Items in order {order.id}</caption>
               <thead className="bg-adm-panel-2 text-left font-mono text-[10.5px] tracking-[0.06em] text-adm-ink-2 uppercase">
@@ -248,6 +276,35 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
                         {[item.brand, item.variantName && item.variantName !== "Standard" ? item.variantName : null, item.sku].filter(Boolean).join(" · ")}
                         {item.productId === null ? " · product deleted" : ""}
                       </span>
+                      {serialsSupported && item.variantId != null && item.productId != null && (
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          {(serialsByItem.get(item.id)?.length ?? 0) > 0 ? (
+                            <span className="font-mono text-[11.5px] text-adm-ink-2">S/N: {serialsByItem.get(item.id)?.join(", ")}</span>
+                          ) : (
+                            <span className="text-xs text-adm-mute">No serial numbers yet</span>
+                          )}
+                          {!cancelled && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setAssigning({
+                                  orderItemId: item.id,
+                                  orderId: order.id,
+                                  label: `${item.productName}${item.variantName && item.variantName !== "Standard" ? ` (${item.variantName})` : ""}`,
+                                  quantity: item.quantity,
+                                  productId: item.productId as number,
+                                  variantId: item.variantId as number,
+                                  serials: serialsByItem.get(item.id) ?? [],
+                                })
+                              }
+                              className="inline-flex items-center gap-1 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-adm-accent-ink uppercase hover:underline"
+                            >
+                              <ScanBarcode aria-hidden className="size-3" />
+                              {(serialsByItem.get(item.id)?.length ?? 0) > 0 ? "Change serials" : "Serial numbers"}
+                            </button>
+                          )}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{item.quantity}</td>
                     <td className="px-4 py-2.5 text-right">
@@ -348,6 +405,15 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
         </div>
       )}
 
+      {order && (
+        <AssignSerialsDialog
+          target={assigning}
+          inStock={assigning ? (unitsQuery.data?.inStockByVariant.get(assigning.variantId) ?? []) : []}
+          units={unitsQuery.data?.units ?? []}
+          onClose={() => setAssigning(null)}
+          onSaved={() => unitsQuery.refetch()}
+        />
+      )}
       {order && statusOpen && <StatusDialog order={order} open={statusOpen} onClose={() => setStatusOpen(false)} onDone={refresh} />}
       {order && payment && <PaymentDialog order={order} target={payment} onClose={() => setPayment(null)} onDone={refresh} />}
     </Drawer>

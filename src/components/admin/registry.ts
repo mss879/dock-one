@@ -13,6 +13,7 @@ import {
   Mail,
   Package,
   ReceiptText,
+  ScrollText,
   Settings,
   ShoppingCart,
   Star,
@@ -37,6 +38,7 @@ export type AdminGroup = (typeof ADMIN_GROUPS)[number];
 export type AdminTabKey =
   | "dashboard"
   | "orders"
+  | "invoices"
   | "discounts"
   | "abandoned-carts"
   | "reports"
@@ -88,6 +90,15 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     owner: "WP-C",
     summary: "Every order with filters and pagination, a detail drawer, status and payment changes, tracking, the timeline and invoice printing.",
     load: () => import("./tabs/OrdersTab"),
+  },
+  {
+    key: "invoices",
+    label: "Invoices",
+    group: "Commerce",
+    icon: ScrollText,
+    owner: "WP-C",
+    summary: "Invoices in the store's own layout — scan serial numbers or search products by name, see the invoice build as you type, then issue, print or save as PDF and record payments. Numbers never skip; issuing takes the units out of stock.",
+    load: () => import("./tabs/InvoicesTab"),
   },
   {
     key: "discounts",

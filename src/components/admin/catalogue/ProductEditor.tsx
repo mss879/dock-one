@@ -26,6 +26,7 @@ import {
 } from "@/components/admin/ui";
 import {
   buildProductSave,
+  buildSerialSave,
   CATALOGUE_MIGRATION,
   emptyProductForm,
   fetchProductForEdit,
@@ -33,6 +34,7 @@ import {
   PRODUCT_TABLE_WRITE,
   PRODUCT_WRITE,
   productFingerprint,
+  SERIALS_WRITE,
   SLUG_RE,
   slugify,
   validateProductForm,
@@ -195,9 +197,16 @@ export function ProductEditor({
     const processed = sessionUploads; // an upload that finishes while this save runs is NOT in it
     setSaving(true);
     const result = await adminRpc<ProductSaveResult>("admin_save_product", payload, PRODUCT_WRITE);
-    setSaving(false);
+    if (!result.ok) setSaving(false);
     if (!toastResult(result, { success: form.id ? "Product saved" : "Product created", failure: "Couldn't save the product" })) return;
     const outcome = result.data;
+    // Serial numbers (25) go right after, by the variant ids the save returned (new variants too).
+    const serials = buildSerialSave(form, outcome.variants.map((v) => v.id));
+    if (serials.length) {
+      const serialResult = await adminRpc<unknown>("admin_set_product_serials", { p_product_id: outcome.product_id, p_variants: serials }, SERIALS_WRITE);
+      if (!serialResult.ok) adminToast.error("Serial numbers not saved", `${serialResult.message} The rest of the product was saved — fix the serials and save again.`);
+    }
+    setSaving(false);
     if (outcome.deactivated_variant_ids?.length) {
       const n = outcome.deactivated_variant_ids.length;
       adminToast.info(
@@ -404,7 +413,7 @@ export function ProductEditor({
             </SectionCard>
 
             {/* ── Variants ───────────────────────────────────────────── */}
-            <SectionCard id="product-variants" title="Variants" description="Prices, SKUs, options, cost and stock — per configuration.">
+            <SectionCard id="product-variants" title="Variants" description="Prices, options, cost, stock and serial numbers — per configuration.">
               {showErrors && errors?.fields.variants && (
                 <AdminNotice tone="error" className="mb-3">
                   {errors.fields.variants}
@@ -417,6 +426,7 @@ export function ProductEditor({
                 showErrors={showErrors}
                 newKey={newKey}
                 disabled={disabled}
+                serialsSupported={form.serialsSupported}
               />
             </SectionCard>
 
