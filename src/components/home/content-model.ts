@@ -94,6 +94,9 @@ export type HeroSlide = {
   imageUrl: string | null;
   /** The stored value as typed (admin previews; may be an https URL the storefront can't serve). */
   rawImageUrl: string | null;
+  /** Optional phone/tablet image (below 1024px, migration 27); null → imageUrl everywhere. */
+  mobileImageUrl: string | null;
+  rawMobileImageUrl: string | null;
   fallbackScene: SceneVariant;
   tone: Tone;
   /** The image's own edge colour, so the mobile split blends. */
@@ -119,10 +122,13 @@ export function normalizeHeroSlide(row: Row): HeroSlide | null {
   const title = typeof row.title === "string" && row.title.trim() ? row.title.slice(0, 200) : null;
   if (id <= 0 || !title) return null;
   const raw = text(row.image_url, 1000);
+  const rawMobile = text(row.mobile_image_url, 1000);
   return {
     id,
     imageUrl: safeImageUrl(raw),
     rawImageUrl: raw,
+    mobileImageUrl: safeImageUrl(rawMobile),
+    rawMobileImageUrl: rawMobile,
     fallbackScene: isScene(row.fallback_scene) ? row.fallback_scene : "paper",
     tone: isTone(row.tone) ? row.tone : "light",
     background: typeof row.background === "string" && HEX_PATTERN.test(row.background) ? row.background : "#0b0b0c",

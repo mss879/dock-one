@@ -4,6 +4,7 @@ import {
   computeTotals,
   formatAmount,
   formatInvoiceDate,
+  formatRs,
   type InvoiceForm,
   type InvoiceSettings,
 } from "@/lib/admin/invoices";
@@ -164,6 +165,17 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
   const paid = form.status === "issued" && totals.total > 0 && totals.balanceDue <= 0;
   const showPaidRows = form.status === "issued" && form.amountPaid > 0;
   const terms = form.paymentTerms.trim();
+  // How the sale is paid (28): printed above the free-text terms.
+  const saleLine =
+    form.saleType === "cash"
+      ? "Cash sale — paid in full."
+      : form.saleType === "card"
+        ? "Card payment — paid in full."
+        : form.saleType === "credit"
+          ? `Credit sale${(form.upfrontAmount ?? 0) > 0 ? ` — ${formatRs(form.upfrontAmount ?? 0)} paid at the sale` : ""}${
+              form.dueDate ? `, balance due by ${formatInvoiceDate(form.dueDate)}${form.creditDays ? ` (${form.creditDays} days)` : ""}` : ""
+            }.`
+          : "";
   const showBank = form.showBankDetails && bank;
   const number = form.number ?? (form.status === "draft" ? "Draft" : "");
   const mark = form.status === "void" ? "VOID" : form.status === "draft" ? "DRAFT" : "";
@@ -233,6 +245,7 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
       ${paid ? html`<div class="inv-stamp" aria-hidden="true">PAID${paidOn ? html`<small>${formatInvoiceDate(paidOn)}</small>` : ""}</div>` : ""}
       <div class="inv-terms">
         <h3>Payment Terms:</h3>
+        ${saleLine ? html`<p class="text">${saleLine}</p>` : ""}
         ${terms ? html`<p class="text">${terms}</p>` : ""}
         ${bankBlock}
       </div>

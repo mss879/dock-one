@@ -27,17 +27,23 @@ import type { SceneVariant } from "@/lib/catalogue-shared";
 import { removeImage } from "@/lib/admin/storage";
 import { toastResult } from "@/lib/admin/toast";
 import { insertRow, updateRows } from "@/lib/admin/write";
+import { LinkField } from "./LinkField";
 import { hexProblem, HiddenNote, ImageField, imageProblem, linkProblem, MarkupHelp, RichPreview, SLIDE_WRITE, Swatch, useUploadsBusy } from "./shared";
 
 /**
  * Create / edit one hero slide (hero_slides, 16) — admin-RLS insert/update with the kit's error +
  * row-count checks; the storefront's `content` tag is refreshed only after the write is confirmed.
- * Images upload to content-images/homepage/hero (WebP) or reuse an existing /images path.
+ * Images upload to content-images/homepage/hero (WebP) or reuse an existing /images path. A slide
+ * has a desktop image and, optionally, a separate phone image (27); links are picked from the
+ * collections / categories / store pages or typed (LinkField).
  */
 
 type SlideForm = {
   id: number | null;
   imageUrl: string;
+  mobileImageUrl: string;
+  /** The slide already had a phone image when opened (so clearing it must be written). */
+  hadMobileImage: boolean;
   fallbackScene: SceneVariant;
   tone: Tone;
   background: string;
@@ -55,7 +61,7 @@ type SlideForm = {
   endsAt: string | null;
 };
 
-type Errors = Partial<Record<"image" | "background" | "chip" | "eyebrow" | "title" | "body" | "cta" | "secondary" | "schedule", string>>;
+type Errors = Partial<Record<"image" | "mobileImage" | "background" | "chip" | "eyebrow" | "title" | "body" | "cta" | "secondary" | "schedule", string>>;
 
 const SCENE_OPTIONS = SCENES.map((scene) => ({ value: scene, label: { night: "Night (dark)", paper: "Paper (light)", lime: "Lime", violet: "Violet" }[scene] }));
 
@@ -63,6 +69,8 @@ function emptyForm(): SlideForm {
   return {
     id: null,
     imageUrl: "",
+    mobileImageUrl: "",
+    hadMobileImage: false,
     fallbackScene: "night",
     tone: "dark",
     background: "#0b0b0c",
@@ -85,6 +93,8 @@ function formFromSlide(slide: HeroSlide): SlideForm {
   return {
     id: slide.id,
     imageUrl: slide.rawImageUrl ?? "",
+    mobileImageUrl: slide.rawMobileImageUrl ?? "",
+    hadMobileImage: Boolean(slide.rawMobileImageUrl),
     fallbackScene: slide.fallbackScene,
     tone: slide.tone,
     background: slide.background,
@@ -106,8 +116,11 @@ function formFromSlide(slide: HeroSlide): SlideForm {
 const orNull = (value: string) => (value.trim() ? value.trim() : null);
 
 function rowFromForm(form: SlideForm): Record<string, unknown> {
+  const mobile = orNull(form.imageUrl) ? orNull(form.mobileImageUrl) : null;
   return {
     image_url: orNull(form.imageUrl),
+    // only sent when there is (or was) a phone image, so slides still save before 27 is applied
+    ...(mobile || form.hadMobileImage ? { mobile_image_url: mobile } : {}),
     fallback_scene: form.fallbackScene,
     tone: form.tone,
     background: form.background.trim(),
@@ -130,6 +143,9 @@ function validate(form: SlideForm): Errors {
   const errors: Errors = {};
   const image = imageProblem(form.imageUrl);
   if (image) errors.image = image;
+  const mobileImage = imageProblem(form.mobileImageUrl);
+  if (mobileImage) errors.mobileImage = mobileImage;
+  else if (form.mobileImageUrl.trim() && !form.imageUrl.trim()) errors.mobileImage = "Add the desktop image first — the phone image only replaces it on small screens.";
   const background = hexProblem(form.background);
   if (background) errors.background = background;
   if (form.chip.trim().length > 40) errors.chip = "Up to 40 characters.";
@@ -189,15 +205,15 @@ export function HeroSlideEditor({
   const update = (patch: Partial<SlideForm>) => setForm((current) => (current ? { ...current, ...patch } : current));
   const error = (key: keyof Errors) => (showErrors ? (errors[key] ?? null) : null);
 
-  const dropUploads = (keep: string | null) => {
-    const orphans = uploads.filter((url) => url !== keep);
+  const dropUploads = (keep: (string | null)[]) => {
+    const orphans = uploads.filter((url) => !keep.includes(url));
     if (orphans.length) void removeImage(orphans);
   };
 
   const requestClose = async () => {
     if (saving) return;
     if (dirty && !(await confirm({ title: "Discard unsaved changes?", tone: "danger", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
-    dropUploads(null);
+    dropUploads([]);
     onClose();
   };
 
@@ -210,7 +226,7 @@ export function HeroSlideEditor({
     const result = form.id ? await updateRows("hero_slides", row, { id: form.id }, { ...SLIDE_WRITE, expect: 1 }) : await insertRow("hero_slides", { ...row, position: nextPosition }, SLIDE_WRITE);
     setSaving(false);
     if (!toastResult(result, { success: form.id ? "Slide saved" : "Slide added", failure: "Couldn't save the slide" })) return;
-    dropUploads(orNull(form.imageUrl));
+    dropUploads([orNull(form.imageUrl), orNull(form.mobileImageUrl)]);
     onSaved(Array.isArray(result.data) ? (result.data[0] as Record<string, unknown>) : (result.data as Record<string, unknown>));
   };
 
@@ -275,14 +291,27 @@ export function HeroSlideEditor({
           <Toggle label="Active" description="Inactive slides are kept but never shown." checked={form.isActive} onChange={(isActive) => update({ isActive })} />
 
           <ImageField
-            label="Slide image"
+            label="Desktop image"
             value={form.imageUrl}
             onChange={(imageUrl) => update({ imageUrl })}
             onUploaded={(url) => setUploads((list) => (list.includes(url) ? list : [...list, url]))}
             folder="hero"
             onBusyChange={busy.onBusy("image")}
             error={error("image")}
-            hint="1920 × 1080 works best, with the left half kept clear for the text. Or the path of an image already on the site, e.g. /images/hero/opening.webp."
+            hint="Shown from 1024 px wide (laptops, desktops, landscape tablets). Best at 2400 × 1100 px (about 2.2 : 1) with the left half kept clear for the text — the right edge always shows. Or the path of an image already on the site, e.g. /images/hero/opening.webp."
+          />
+
+          <ImageField
+            label="Mobile image"
+            value={form.mobileImageUrl}
+            onChange={(mobileImageUrl) => update({ mobileImageUrl })}
+            onUploaded={(url) => setUploads((list) => (list.includes(url) ? list : [...list, url]))}
+            folder="hero"
+            aspect="landscape"
+            onBusyChange={busy.onBusy("mobileImage")}
+            error={error("mobileImage")}
+            disabled={!form.imageUrl.trim() && !form.mobileImageUrl.trim()}
+            hint="Optional — phones and portrait tablets (below 1024 px), shown as a band under the text. Best at 1200 × 700 px (about 1.7 : 1) with the product in the middle; no text needed in the image. Empty = phones get the desktop image."
           />
 
           <div className="grid gap-4 sm:grid-cols-3">
@@ -324,19 +353,15 @@ export function HeroSlideEditor({
           </Field>
           <MarkupHelp />
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:items-start">
             <Field label="Button label" optional error={error("cta")}>
               <Input value={form.ctaLabel} onChange={(event) => update({ ctaLabel: event.target.value })} maxLength={40} />
             </Field>
-            <Field label="Button link" optional hint="/shop?category=laptops, /shop?filter=deals, /#categories or https://…">
-              <Input value={form.ctaHref} onChange={(event) => update({ ctaHref: event.target.value })} spellCheck={false} maxLength={500} />
-            </Field>
+            <LinkField label="Button link" optional value={form.ctaHref} onChange={(ctaHref) => update({ ctaHref })} />
             <Field label="Second link label" optional error={error("secondary")}>
               <Input value={form.secondaryLabel} onChange={(event) => update({ secondaryLabel: event.target.value })} maxLength={40} />
             </Field>
-            <Field label="Second link" optional>
-              <Input value={form.secondaryHref} onChange={(event) => update({ secondaryHref: event.target.value })} spellCheck={false} maxLength={500} />
-            </Field>
+            <LinkField label="Second link" optional value={form.secondaryHref} onChange={(secondaryHref) => update({ secondaryHref })} />
           </div>
 
           <Field label="Read-out lines" optional hint="The small decorative HUD box (desktop only): up to 6 lines of 40 characters. Press Enter after each line.">

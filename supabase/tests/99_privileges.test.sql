@@ -101,7 +101,10 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.admin_delete_invoice_payment(integer)',                     '26_invoices'),
   ('public.admin_invoice_product_search(text,integer)',                '26_invoices'),
   ('public.admin_invoice_client_search(text,integer)',                 '26_invoices'),
-  ('public.admin_invoice_summary()',                                   '26_invoices');
+  ('public.admin_invoice_summary()',                                   '26_invoices'),
+  ('public.admin_save_invoice_sale(jsonb,jsonb,jsonb)',                '28_invoice_sale_types'),
+  ('public.admin_invoice_due_alerts(integer)',                         '28_invoice_sale_types'),
+  ('public.admin_expense_summary(date,date)',                          '29_expenses');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);
@@ -131,6 +134,8 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.invoices',                ARRAY['anon'],                  '26_invoices'),
   ('public.invoice_items',           ARRAY['anon'],                  '26_invoices'),
   ('public.invoice_payments',        ARRAY['anon'],                  '26_invoices'),
+  ('public.expense_categories',      ARRAY['anon'],                  '29_expenses'),
+  ('public.expenses',                ARRAY['anon'],                  '29_expenses'),
   ('public.product_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
   ('public.variant_sourcing',        ARRAY['anon'],                  '34_seed_inventory');
 

@@ -20,6 +20,13 @@ what to do right after, and how to check it worked.
 > the order page receives the account while a transfer is awaited. **If you already ran 03 and 09
 > before this date, run both again** (in that order — both are safe to re-run); nothing else changes.
 
+> **Added 2026-10-10 — four new files: run 27, 28, 29, then 37** (each safe to re-run; on a
+> project that already has 01–26 and 34–36, those four are all you need, in that order):
+> `27` a separate **mobile image** per hero slide · `28` **Cash / Card / Credit** on invoices with
+> due-date alerts · `29` **Expenses** · `37` the client's **real contact details** (+94 76 074 4952,
+> info@dockonesolutions.com, No. 3F14, 3rd Floor, Unity Plaza, Colombo 04). If you ever re-run `26`,
+> run `28` again after it (28 replaces one of 26's functions).
+
 ---
 
 ## 0. Before the first migration
@@ -72,14 +79,19 @@ simply hidden. Nothing crashes.
 | 24 | Admin account | `24_admin_account.sql` | 02 | `/admin` for `admin@dockone.lk` (run once that account exists and is confirmed) |
 | 25 | Serial numbers | `25_serial_numbers.sql` | 02, 04, 07, 23 | One serial per unit: entered with the stock in Products, picked when packing a web order |
 | 26 | Invoices | `26_invoices.sql` | 05, 07, 23, 25 | Admin → Invoices: the invoice builder with live preview, numbering, stock, serials, payments |
+| 27 | Hero mobile images | `27_hero_mobile_images.sql` | 16 | A second, optional phone image per hero slide |
+| 28 | Invoice payment types | `28_invoice_sale_types.sql` | 26 | Cash / Card / Credit on each invoice, credit days → due date, "payment due" alerts in the admin |
+| 29 | Expenses | `29_expenses.sql` | 01, 02 | Admin → Commerce → Expenses: business spending by category and period |
 | 30–33 | **Demo content** (seeds) | `30_…`–`33_…` | the feature they fill | The approved design's content, moved into the database |
 | 34 | **Real inventory** | `34_seed_inventory.sql` | 04, 05, 30 | The client's 86 stock rows as 59 live products, prices and stock; demo catalogue hidden |
 | 35 | Inventory costs (**not in git**) | `35_seed_inventory_costs.sql` | 34 | Cost and dealer prices for those variants — admin-only |
 | 36 | Inventory update | `36_seed_inventory_update.sql` | 34 | The second stock list: 2 new items (awaiting prices), 3 stock corrections, details |
+| 37 | **Real contact details** | `37_seed_contact_details.sql` | 03, 16 | Phone, WhatsApp, email, address and showroom pickup = the client's real ones |
 
 The simplest safe route is: **01 → 23 in order, then the seeds you want**, and `24` once the admin
-account exists. Then **34, 35, 36** for the real catalogue, and **25, then 26** for serial numbers and
-invoices (on a project that already has 01–24 and 34–36, just run 25 then 26).
+account exists. Then **34, 35, 36** for the real catalogue, **25, then 26** for serial numbers and
+invoices (on a project that already has 01–24 and 34–36, just run 25 then 26), and **27, 28, 29, 37**
+for the hero phone images, invoice payment types, expenses and the real contact details.
 
 ---
 
@@ -413,6 +425,48 @@ invoices (on a project that already has 01–24 and 34–36, just run 25 then 26
   on from the last paper invoice, check the address, contacts and notes.
 - **Check:** `SELECT number_prefix, next_number, cardinality(default_notes) FROM public.invoice_settings;`
   → `INV-`, `1`, `10`.
+
+### 27 — Hero mobile images · `27_hero_mobile_images.sql`
+- **Adds:** `hero_slides.mobile_image_url` (optional; same rule as the desktop image: a `/images/…`
+  path or an uploaded `https://` image).
+- **Needs:** 16.
+- **Switches on:** admin → Content → Homepage → a hero slide → **Mobile image**. Phones and portrait
+  tablets (below 1024 px) get that image, laptops and desktops the desktop one — each device
+  downloads only its own. Empty = the desktop image everywhere, exactly as before. Recommended
+  sizes are printed under each upload: desktop **2400 × 1100 px**, mobile **1200 × 700 px**.
+- **Also in this release (no SQL):** every homepage link field (hero buttons, promo tiles) has a
+  picker — **Collection**, **Category**, **Store page** or **Custom address**. For a sale banner: make
+  a collection called "Sale" in Catalogue → Collections, add the products, then pick Collection →
+  Sale on the slide's button. The banner image itself now opens the button's link.
+- **Check:** `SELECT id, left(title, 30), mobile_image_url FROM public.hero_slides ORDER BY position;`
+
+### 28 — Invoice payment types · `28_invoice_sale_types.sql`
+- **Adds:** on `invoices`: `sale_type` (cash · card · credit), `upfront_amount` + `upfront_method`
+  (credit: what was paid at the sale, and how), `credit_days`; on `invoice_payments`: `source`
+  (manual · sale). The RPC `admin_save_invoice_sale` (the editor's save), `admin_invoice_due_alerts`,
+  and a new `admin_revert_invoice`.
+- **Needs:** 26. (Re-running 26 later puts back its older revert — run 28 again after it.)
+- **Switches on:** admin → Invoices → an invoice → **Payment**: **Cash** or **Card** = paid in full —
+  issuing records the payment and the invoice shows as paid. **Credit** = enter the amount paid now
+  (0 is fine) and how, and the **days** the client has to pay the balance; the due date becomes
+  the invoice date + those days. Later payments are recorded as before (Record payment). When a
+  balance falls due, a **"client payment due" bar** appears at the top of every admin page (with the
+  client, phone, amount and how many days overdue), and Invoices has a **"Due now"** filter. The
+  printed invoice states the payment type and, for credit, the balance due date.
+- **Right after:** nothing. Invoices made before 28 keep "not set" and behave as they always did.
+- **Check:** `SELECT sale_type, count(*) FROM public.invoices GROUP BY 1;`
+
+### 29 — Expenses · `29_expenses.sql`
+- **Adds:** `expense_categories` (12 starter categories: Rent, Salaries & wages, Stock purchases,
+  Electricity & water, Internet & phone, Delivery & courier, Marketing & advertising, Shop supplies,
+  Repairs & maintenance, Transport & fuel, Bank charges & fees, Other — all editable), `expenses`
+  (date, category, what for, amount, paid by, paid to, bill / receipt no., notes) and
+  `admin_expense_summary` (totals for a period, per category and per payment method). Admins only.
+- **Needs:** 01, 02.
+- **Switches on:** admin → Commerce → **Expenses**: add / edit / delete expenses, filter by period
+  (this month, last month, 30 / 90 days, this year, custom) and category, totals, a by-category
+  breakdown, CSV export, and **Categories** to add, rename, reorder or switch them off.
+- **Check:** `SELECT count(*) FROM public.expense_categories;` → `12`.
 
 ---
 

@@ -2,6 +2,8 @@
 -- private database copy, undo 34_seed_inventory — drop the real catalogue and its five departments,
 -- and switch the demo products and collections back on — so those files test their own migration
 -- exactly as designed. 34_seed_inventory.test.sql covers the real catalogue.
+-- Likewise it puts back seed 31's placeholder contact details that 37_seed_contact_details replaced
+-- (37_seed_contact_details.test.sql covers the real ones).
 DO $fixture$
 BEGIN
   IF to_regclass('public.variant_sourcing') IS NOT NULL THEN
@@ -25,4 +27,14 @@ BEGIN
      AND NOT is_active;
   UPDATE public.collections SET is_active = TRUE
    WHERE id IN ('work-from-home', 'gaming-zone', 'campus-kit', 'creator-studio') AND NOT is_active;
+  IF EXISTS (SELECT 1 FROM public.app_config WHERE name = 'seed_37_contact_details') THEN
+    UPDATE public.store_settings
+       SET phone = '+94 11 234 5678', whatsapp = '+94 77 123 4567', email = 'hello@dockone.lk',
+           address = 'No. 42, Galle Road, Colombo 03', pickup_address = 'No. 42, Galle Road, Colombo 03',
+           pickup_note = 'Collect in Colombo 03, same day'
+     WHERE id;
+    UPDATE public.content_blocks
+       SET data = replace(data::text, '"Collect in Colombo 04, same day"', '"Collect in Colombo 03, same day"')::jsonb
+     WHERE key = 'order_your_way';
+  END IF;
 END $fixture$;

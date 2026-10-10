@@ -1,4 +1,5 @@
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
+import Link from "next/link";
 import { BracketLink, Button } from "@/components/ui/Button";
 import { Cross } from "@/components/ui/Cross";
 import { Scene } from "@/components/ui/Scene";
@@ -9,6 +10,28 @@ import { LIST_ICON_COMPONENTS } from "./icons";
 
 type Perk = HeroPerks["items"][number];
 
+const IMAGE_CLASS = "object-cover object-[82%_center] lg:object-right";
+const DESKTOP_SIZES = "(min-width: 1360px) 1296px, 100vw";
+
+/**
+ * The slide image. With a mobile image (27) it is a <picture>: below 1024px the phone image, from
+ * 1024px the desktop one — the browser downloads only the one it shows.
+ */
+function SlideImage({ desktop, mobile, eager }: { desktop: string; mobile: string | null; eager: boolean }) {
+  const common = { alt: "", fill: true, quality: 90, loading: eager ? "eager" : "lazy", fetchPriority: eager ? "high" : "auto" } as const;
+  if (!mobile) return <Image {...common} alt="" src={desktop} sizes={DESKTOP_SIZES} className={IMAGE_CLASS} />;
+  const {
+    props: { srcSet: desktopSrcSet },
+  } = getImageProps({ ...common, src: desktop, sizes: DESKTOP_SIZES });
+  const { props: mobileProps } = getImageProps({ ...common, src: mobile, sizes: "100vw" });
+  return (
+    <picture>
+      <source media="(min-width: 1024px)" srcSet={desktopSrcSet} sizes={DESKTOP_SIZES} />
+      <img {...mobileProps} alt="" className={IMAGE_CLASS} />
+    </picture>
+  );
+}
+
 function Slide({ slide, index, eager, ctx }: { slide: HeroSlide; index: string; eager: boolean; ctx: ContentContext }) {
   const dark = slide.tone === "dark";
   // background is a validated #hex (content-model normalizeHeroSlide) — safe in a style attribute
@@ -17,19 +40,12 @@ function Slide({ slide, index, eager, ctx }: { slide: HeroSlide; index: string; 
     <div className={`relative flex flex-col lg:block lg:h-[600px] ${dark ? "text-paper" : "text-ink"}`} style={{ background }}>
       <div className="relative order-2 h-60 sm:h-80 lg:absolute lg:inset-0 lg:h-auto">
         {slide.imageUrl ? (
-          <Image
-            src={slide.imageUrl}
-            alt=""
-            fill
-            sizes="(min-width: 1360px) 1296px, 100vw"
-            quality={90}
-            loading={eager ? "eager" : "lazy"}
-            fetchPriority={eager ? "high" : "auto"}
-            className="object-cover object-[82%_center] lg:object-right"
-          />
+          <SlideImage desktop={slide.imageUrl} mobile={slide.mobileImageUrl} eager={eager} />
         ) : (
           <Scene variant={slide.fallbackScene} ring={slide.fallbackScene === "night"} />
         )}
+        {/* the banner itself goes where the button goes (the button stays the keyboard / screen-reader target) */}
+        {slide.cta && <Link href={slide.cta.href} tabIndex={-1} aria-hidden className="absolute inset-0" />}
         <div aria-hidden className="absolute inset-x-0 top-0 h-20 lg:hidden" style={{ background: `linear-gradient(${background}, transparent)` }} />
       </div>
 

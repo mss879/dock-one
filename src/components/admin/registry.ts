@@ -19,6 +19,7 @@ import {
   Star,
   TicketPercent,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -39,6 +40,7 @@ export type AdminTabKey =
   | "dashboard"
   | "orders"
   | "invoices"
+  | "expenses"
   | "discounts"
   | "abandoned-carts"
   | "reports"
@@ -99,6 +101,15 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     owner: "WP-C",
     summary: "Invoices in the store's own layout — scan serial numbers or search products by name, see the invoice build as you type, then issue, print or save as PDF and record payments. Numbers never skip; issuing takes the units out of stock.",
     load: () => import("./tabs/InvoicesTab"),
+  },
+  {
+    key: "expenses",
+    label: "Expenses",
+    group: "Commerce",
+    icon: Wallet,
+    owner: "WP-C",
+    summary: "What the business pays out — rent, salaries, courier, stock and more — by category and period, with totals and CSV export.",
+    load: () => import("./tabs/ExpensesTab"),
   },
   {
     key: "discounts",

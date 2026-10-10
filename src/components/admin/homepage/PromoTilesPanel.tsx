@@ -20,6 +20,7 @@ import { useAdminQuery, unwrapRows } from "@/lib/admin/query";
 import { removeImage } from "@/lib/admin/storage";
 import { adminToast, toastResult } from "@/lib/admin/toast";
 import { deleteRows, upsertRows } from "@/lib/admin/write";
+import { LinkField } from "./LinkField";
 import { hexProblem, HiddenNote, ImageField, imageProblem, InfoLine, linkProblem, MarkupHelp, RichPreview, Swatch, TILE_WRITE, useUploadsBusy } from "./shared";
 
 /**
@@ -277,13 +278,11 @@ function TileEditor({ form: initial, ctx, onClose, onSaved }: { form: TileForm |
             <Textarea rows={2} value={form.body} onChange={(event) => update({ body: event.target.value })} maxLength={160} />
           </Field>
           <MarkupHelp />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:items-start">
             <Field label="Button label" optional error={error("cta")}>
               <Input value={form.ctaLabel} onChange={(event) => update({ ctaLabel: event.target.value })} maxLength={40} />
             </Field>
-            <Field label="Tile link" required hint="/shop?category=storage, /collection/…, /#categories or https://…" error={error("href")}>
-              <Input value={form.href} onChange={(event) => update({ href: event.target.value })} spellCheck={false} maxLength={500} />
-            </Field>
+            <LinkField label="Tile link" required value={form.href} onChange={(href) => update({ href })} error={error("href")} />
           </div>
         </div>
       )}

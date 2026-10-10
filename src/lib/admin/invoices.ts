@@ -72,6 +72,30 @@ export function paymentMethodLabel(method: string): string {
   return PAYMENT_METHODS.find((m) => m.value === method)?.label ?? "Other";
 }
 
+/**
+ * How the sale is paid (28_invoice_sale_types): cash / card = in full at the sale; credit = part now
+ * (upfrontAmount, upfrontMethod) and the balance within creditDays — the due date follows. Issuing
+ * records what was paid at the sale as a payment. null = not chosen (invoices from before 28).
+ */
+export type SaleType = "cash" | "card" | "credit";
+export const SALE_TYPES: readonly { value: SaleType; label: string; hint: string }[] = [
+  { value: "cash", label: "Cash", hint: "Paid in full in cash — recorded as paid when you issue." },
+  { value: "card", label: "Card", hint: "Paid in full by card — recorded as paid when you issue." },
+  { value: "credit", label: "Credit", hint: "Part now (or nothing), the balance later — you're alerted when it falls due." },
+];
+export const SALE_MIGRATION = "28_invoice_sale_types.sql";
+export const CREDIT_DAY_CHOICES = [7, 14, 30, 45, 60, 90] as const;
+
+export function saleTypeLabel(type: SaleType | null): string {
+  return SALE_TYPES.find((t) => t.value === type)?.label ?? "Not set";
+}
+
+/** A credit sale's due date (invoice date + credit days), or null while the days are missing. */
+export function creditDueDate(form: Pick<InvoiceForm, "saleType" | "issueDate" | "creditDays">): string | null {
+  if (form.saleType !== "credit" || form.creditDays == null || !Number.isInteger(form.creditDays) || form.creditDays < 1 || !isYmd(form.issueDate)) return null;
+  return addDays(form.issueDate, form.creditDays);
+}
+
 // ── Write options: business codes and constraint names → admin copy ──────────
 
 const detail = (text: string) => text || "The database refused this change.";
@@ -348,6 +372,13 @@ export type InvoiceForm = {
   deductStock: boolean;
   internalNote: string;
   lines: InvoiceLine[];
+  /** How the sale is paid (28); null = not chosen. */
+  saleType: SaleType | null;
+  /** Credit only: paid at the sale, and how. */
+  upfrontAmount: number | null;
+  upfrontMethod: PaymentMethod;
+  /** Credit only: days to pay the balance (1–365); the due date = invoice date + days. */
+  creditDays: number | null;
   // ── facts the database owns (read-only here) ──
   stockDeducted: boolean;
   amountPaid: number;
@@ -367,6 +398,8 @@ export type InvoicePayment = {
   method: PaymentMethod | string;
   reference: string | null;
   note: string | null;
+  /** "sale" = recorded automatically when the invoice was issued (28); "manual" = Record payment. */
+  source: "manual" | "sale";
   createdAt: string | null;
 };
 
@@ -420,6 +453,10 @@ export function emptyInvoiceForm(settings: InvoiceSettings | null, today: string
     deductStock: settings?.defaultDeductStock ?? true,
     internalNote: "",
     lines: [],
+    saleType: "cash",
+    upfrontAmount: 0,
+    upfrontMethod: "cash",
+    creditDays: settings?.defaultDueDays != null && settings.defaultDueDays > 0 ? settings.defaultDueDays : 30,
     stockDeducted: false,
     amountPaid: 0,
     savedTotal: 0,
@@ -461,8 +498,16 @@ export function paymentFromRow(row: Row): InvoicePayment {
     method: str(row.method),
     reference: strOrNull(row.reference),
     note: strOrNull(row.note),
+    source: row.source === "sale" ? "sale" : "manual",
     createdAt: strOrNull(row.created_at),
   };
+}
+
+function normalizeSaleType(value: unknown): SaleType | null {
+  return value === "cash" || value === "card" || value === "credit" ? value : null;
+}
+function normalizeMethod(value: unknown): PaymentMethod {
+  return PAYMENT_METHODS.some((m) => m.value === value) ? (value as PaymentMethod) : "cash";
 }
 
 export function formFromRows(invoice: Row, items: Row[]): InvoiceForm {
@@ -492,6 +537,10 @@ export function formFromRows(invoice: Row, items: Row[]): InvoiceForm {
     deductStock: invoice.deduct_stock !== false,
     internalNote: str(invoice.internal_note),
     lines: items.map(lineFromRow),
+    saleType: normalizeSaleType(invoice.sale_type),
+    upfrontAmount: num(invoice.upfront_amount, 0),
+    upfrontMethod: normalizeMethod(invoice.upfront_method),
+    creditDays: invoice.credit_days == null ? null : num(invoice.credit_days),
     stockDeducted: invoice.stock_deducted === true,
     amountPaid: num(invoice.amount_paid, 0),
     savedTotal: num(invoice.total, 0),
@@ -519,6 +568,7 @@ export function invoiceFingerprint(form: InvoiceForm): string {
     form.billToName, form.billToAddress, form.billToCity, form.billToPostalCode, form.billToPhone, form.billToEmail,
     form.paymentTerms, form.notes, form.showBankDetails, form.discountType, form.discountValue, form.taxType, form.taxValue,
     form.deductStock, form.internalNote,
+    form.saleType, form.saleType === "credit" ? [form.upfrontAmount, form.upfrontMethod, form.creditDays] : null,
     form.lines.map((l) => [l.id, l.productId, l.variantId, l.description, cleanSerials(l.serialNumbers), l.warranty, l.quantity, l.unitPrice]),
   ]);
 }
@@ -546,7 +596,7 @@ export function buildInvoiceSave(form: InvoiceForm): { p_invoice: Record<string,
   const issued = form.status === "issued";
   const invoice: Record<string, unknown> = {
     issue_date: form.issueDate,
-    due_date: form.dueDate || null,
+    due_date: creditDueDate(form) ?? (form.dueDate || null),
     reference: nullIfBlank(form.reference),
     order_id: form.orderId,
     customer_id: form.customerId,
@@ -583,12 +633,29 @@ export function buildInvoiceSave(form: InvoiceForm): { p_invoice: Record<string,
   return { p_invoice: invoice, p_items: items };
 }
 
+/**
+ * p_sale for admin_save_invoice_sale (28), or null when there is nothing to send: a draft sends its
+ * whole choice; an issued credit sale only its days (more time moves the due date); everything else
+ * is fixed once issued.
+ */
+export function buildSaleTerms(form: InvoiceForm): Record<string, unknown> | null {
+  if (form.saleType == null || form.status === "void") return null;
+  if (form.status === "issued") return form.saleType === "credit" && form.creditDays != null ? { credit_days: form.creditDays } : null;
+  if (form.saleType !== "credit") return { sale_type: form.saleType };
+  return {
+    sale_type: "credit",
+    upfront_amount: form.upfrontAmount ?? 0,
+    upfront_method: form.upfrontMethod,
+    ...(form.creditDays != null ? { credit_days: form.creditDays } : {}),
+  };
+}
+
 // ── Validation (mirrors 25's checks; the database stays the authority) ────────
 
 export type LineErrors = Partial<Record<"description" | "quantity" | "unitPrice" | "serialNumbers" | "warranty", string>>;
 export type InvoiceErrors = {
   count: number;
-  fields: Partial<Record<"issueDate" | "dueDate" | "billToName" | "billToEmail" | "billToAddress" | "billToCity" | "billToPostalCode" | "billToPhone" | "reference" | "paymentTerms" | "notes" | "discount" | "tax" | "internalNote" | "lines", string>>;
+  fields: Partial<Record<"saleType" | "upfrontAmount" | "creditDays" | "issueDate" | "dueDate" | "billToName" | "billToEmail" | "billToAddress" | "billToCity" | "billToPostalCode" | "billToPhone" | "reference" | "paymentTerms" | "notes" | "discount" | "tax" | "internalNote" | "lines", string>>;
   lines: Record<string, LineErrors>;
 };
 
@@ -602,6 +669,16 @@ export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boo
   if (!isYmd(form.issueDate)) fields.issueDate = "Choose the invoice date.";
   if (form.dueDate && !isYmd(form.dueDate)) fields.dueDate = "Choose a valid date, or clear it.";
   else if (form.dueDate && isYmd(form.issueDate) && form.dueDate < form.issueDate) fields.dueDate = "The due date can't be before the invoice date.";
+  if (form.saleType === "credit") {
+    const upfront = form.upfrontAmount ?? 0;
+    if (upfront < 0 || !twoDecimals(upfront) || upfront > INVOICE_LIMITS.unitPrice * 100) fields.upfrontAmount = "Enter the amount paid now in rupees (0 if nothing).";
+    else if (options.forIssue) {
+      const total = computeTotals(form).total;
+      if (total > 0 && upfront >= total) fields.upfrontAmount = "That covers the whole invoice — choose Cash or Card instead of Credit.";
+    }
+    if (form.creditDays != null && (!Number.isInteger(form.creditDays) || form.creditDays < 1 || form.creditDays > 365)) fields.creditDays = "Between 1 and 365 days.";
+    else if (form.creditDays == null && (options.forIssue || form.status === "issued")) fields.creditDays = "Enter how many days the client has to pay the balance.";
+  }
   if (options.forIssue && form.billToName.trim() === "") fields.billToName = "Add the client's name before issuing.";
   else if (tooLong(form.billToName, INVOICE_LIMITS.name)) fields.billToName = `At most ${INVOICE_LIMITS.name} characters.`;
   if (form.billToEmail.trim() !== "" && (!EMAIL_RE.test(form.billToEmail.trim()) || tooLong(form.billToEmail, INVOICE_LIMITS.email))) fields.billToEmail = "This email doesn't look right.";
@@ -685,15 +762,20 @@ function ymdTriple(ymd: string): [number, number, number] {
 
 // ── The list ──────────────────────────────────────────────────────────────────
 
-export type InvoiceListFilter = "all" | "open" | "overdue" | "paid" | "draft" | "void";
+export type InvoiceListFilter = "all" | "open" | "due" | "overdue" | "paid" | "draft" | "void";
 export const INVOICE_LIST_FILTERS: readonly { value: InvoiceListFilter; label: string }[] = [
   { value: "all", label: "All invoices" },
   { value: "open", label: "Awaiting payment" },
+  { value: "due", label: "Due now (today or earlier)" },
   { value: "overdue", label: "Overdue" },
   { value: "paid", label: "Paid" },
   { value: "draft", label: "Drafts" },
   { value: "void", label: "Void" },
 ];
+
+export function isInvoiceListFilter(value: unknown): value is InvoiceListFilter {
+  return INVOICE_LIST_FILTERS.some((f) => f.value === value);
+}
 
 export type InvoiceListRow = {
   id: number;
@@ -758,6 +840,7 @@ export async function fetchInvoicePage(
   else if (filter === "void") query = query.eq("status", "void");
   else if (filter === "paid") query = query.eq("status", "issued").eq("balance_due", 0);
   else if (filter === "open") query = query.eq("status", "issued").gt("balance_due", 0);
+  else if (filter === "due") query = query.eq("status", "issued").gt("balance_due", 0).lte("due_date", today);
   else if (filter === "overdue") query = query.eq("status", "issued").gt("balance_due", 0).lt("due_date", today);
   const key = sort && SORTABLE.has(sort.key) ? sort.key : "issue_date";
   const ascending = sort ? sort.direction === "asc" : false;
@@ -1034,6 +1117,10 @@ export function duplicateForm(source: InvoiceForm, settings: InvoiceSettings | n
     taxType: source.taxType,
     taxValue: source.taxValue,
     deductStock: source.deductStock,
+    saleType: source.saleType ?? fresh.saleType,
+    upfrontAmount: source.saleType === "credit" ? source.upfrontAmount : fresh.upfrontAmount,
+    upfrontMethod: source.upfrontMethod,
+    creditDays: source.creditDays ?? fresh.creditDays,
     lines: source.lines.map((line) => emptyLine({ ...line, key: newLineKey(), id: null, serialNumbers: [], stockTaken: 0 })),
   };
 }

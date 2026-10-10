@@ -8,6 +8,7 @@ import { site } from "@/data/site";
 import { safeAdminRedirect } from "@/lib/admin/redirect";
 import { adminToast } from "@/lib/admin/toast";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
+import { DueAlertBar } from "./invoices/DueAlertBar";
 import { adminTabHref, adminTabsByGroup, resolveAdminTab, type AdminTabDef } from "./registry";
 import { AdminToaster, IconButton } from "./ui";
 
@@ -302,6 +303,7 @@ export function AdminChrome({ email, children }: { email: string; children: Reac
           </div>
         </header>
         <main ref={mainRef} id="admin-main" tabIndex={-1} aria-label={active.label} className="w-full max-w-[1440px] flex-1 px-3 py-5 outline-none sm:px-5 lg:px-8 lg:py-7">
+          <DueAlertBar />
           {children}
         </main>
       </div>

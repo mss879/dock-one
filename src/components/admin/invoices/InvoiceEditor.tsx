@@ -25,6 +25,7 @@ import {
   NumberInput,
   QueryError,
   SectionCard,
+  Select,
   Skeleton,
   StatusBadge,
   Textarea,
@@ -34,7 +35,10 @@ import {
 import { addDays, todayYmd } from "@/lib/admin/dates";
 import {
   buildInvoiceSave,
+  buildSaleTerms,
   computeTotals,
+  CREDIT_DAY_CHOICES,
+  creditDueDate,
   dueHint,
   duplicateForm,
   emptyInvoiceForm,
@@ -55,7 +59,13 @@ import {
   invoiceDisplayStatus,
   SERIALS_MIGRATION,
   invoiceFingerprint,
+  PAYMENT_METHODS,
+  SALE_MIGRATION,
+  SALE_TYPES,
+  saleTypeLabel,
   validateInvoiceForm,
+  type PaymentMethod,
+  type SaleType,
   type AdjustType,
   type ClientHit,
   type InvoiceForm,
@@ -99,6 +109,25 @@ const AUTOSAVE_MS = 1200;
 const MONEY_TOLERANCE = 0.005;
 
 /** Keep what the admin typed; take what the database owns. */
+/** Set once admin_save_invoice_sale turns out to be missing (28 not applied): plain saves from then on. */
+let saleRpcMissing = false;
+
+/**
+ * Save the invoice and how it is paid in one call (admin_save_invoice_sale, 28). Until 28 is
+ * applied the invoice still saves through 26's admin_save_invoice — only the payment type waits.
+ */
+async function saveInvoiceRpc(form: InvoiceForm) {
+  const args = buildInvoiceSave(form);
+  const sale = buildSaleTerms(form);
+  if (sale && !saleRpcMissing) {
+    const result = await adminRpc<InvoiceRpcResult>("admin_save_invoice_sale", { ...args, p_sale: sale }, { ...INVOICE_WRITE, migration: SALE_MIGRATION });
+    if (result.ok || result.kind !== "missing_migration") return result;
+    saleRpcMissing = true;
+    adminToast.info("Payment type not saved", `Apply ${SALE_MIGRATION} to save Cash / Card / Credit. The rest of the invoice is saved.`);
+  }
+  return adminRpc<InvoiceRpcResult>("admin_save_invoice", args, INVOICE_WRITE);
+}
+
 function mergeSaved(current: InvoiceForm, saved: InvoiceForm): InvoiceForm {
   return {
     ...current,
@@ -294,7 +323,14 @@ export function InvoiceEditor({
   });
   const inflight = useRef<Promise<boolean> | null>(null);
 
-  const update = (patch: Partial<InvoiceForm>) => setForm((current) => (current ? { ...current, ...patch } : current));
+  // A credit sale's due date follows its invoice date + credit days.
+  const update = (patch: Partial<InvoiceForm>) =>
+    setForm((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      const due = creditDueDate(next);
+      return due && due !== next.dueDate ? { ...next, dueDate: due } : next;
+    });
 
   const applyServer = (result: InvoiceRpcResult) => {
     const next = fromRpcResult(result);
@@ -331,7 +367,7 @@ export function InvoiceEditor({
     }
     const run = (async () => {
       setSaveState({ kind: "saving" });
-      const result = await adminRpc<InvoiceRpcResult>("admin_save_invoice", buildInvoiceSave(current), INVOICE_WRITE);
+      const result = await saveInvoiceRpc(current);
       if (!result.ok) {
         const conflict = result.message.includes("changed somewhere else");
         setSaveState({ kind: "error", message: result.message, conflict });
@@ -456,7 +492,7 @@ export function InvoiceEditor({
     if (!form || duplicating) return;
     setDuplicating(true);
     const copy = duplicateForm(form, settings, today);
-    const result = await adminRpc<InvoiceRpcResult>("admin_save_invoice", buildInvoiceSave(copy), INVOICE_WRITE);
+    const result = await saveInvoiceRpc(copy);
     setDuplicating(false);
     if (!result.ok) {
       adminToast.error("Couldn't duplicate the invoice", result.message);
@@ -509,6 +545,9 @@ export function InvoiceEditor({
   const issued = form.status === "issued";
   const isVoid = form.status === "void";
   const locked = !draft;
+  const credit = form.saleType === "credit";
+  const saleHint = SALE_TYPES.find((t) => t.value === form.saleType)?.hint;
+  const creditBalance = totals ? Math.max(totals.total - (form.upfrontAmount ?? 0), 0) : 0;
   const fieldError = (key: keyof NonNullable<typeof errors>["fields"]) => (showErrors ? (errors?.fields[key] ?? null) : null);
   const nextNumber = settings ? formatInvoiceNumber(settings.numberPrefix, settings.numberDigits, settings.nextNumber) : null;
   const catalogueLines = form.lines.filter((l) => l.variantId != null);
@@ -762,10 +801,10 @@ export function InvoiceEditor({
               <Field label="Date" required error={fieldError("issueDate")}>
                 <Input type="date" value={form.issueDate} disabled={locked} onChange={(e) => update({ issueDate: e.target.value })} />
               </Field>
-              <Field label="Due date" optional error={fieldError("dueDate")}>
-                <Input type="date" value={form.dueDate ?? ""} min={form.issueDate} disabled={isVoid} onChange={(e) => update({ dueDate: e.target.value || null })} />
+              <Field label="Due date" optional error={fieldError("dueDate")} hint={credit ? "Set by the credit days under Payment." : undefined}>
+                <Input type="date" value={form.dueDate ?? ""} min={form.issueDate} disabled={isVoid || credit} onChange={(e) => update({ dueDate: e.target.value || null })} />
               </Field>
-              {!isVoid && (
+              {!isVoid && !credit && (
                 <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
                   <span className="mr-1 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-adm-mute uppercase">Due</span>
                   {dueChoices.map((choice) => {
@@ -875,6 +914,87 @@ export function InvoiceEditor({
               )}
               {totals && form.discountType === "amount" && (form.discountValue ?? 0) > totals.subtotal && totals.subtotal > 0 && (
                 <p className="-mt-2 text-xs text-adm-mute">The discount is capped at the subtotal.</p>
+              )}
+            </div>,
+          )}
+
+          {section(
+            "invoice-payment",
+            "Payment",
+            draft ? "How the client pays. Issuing records what was paid at the sale." : "How the client paid — fixed once issued (the credit period can still change).",
+            <div className="grid gap-4">
+              {form.saleType == null && !draft ? (
+                <p className="text-[13px] text-adm-ink-2">Not set — this invoice was made before payment types. Record payments below as they come in.</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Segmented<SaleType>
+                      label="Payment type"
+                      value={(form.saleType ?? "") as SaleType}
+                      disabled={!draft}
+                      options={SALE_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                      onChange={(saleType) => update({ saleType })}
+                    />
+                    {saleHint && <p className="text-xs leading-5 text-adm-mute">{saleHint}</p>}
+                  </div>
+                  {fieldError("saleType") && <p className="text-xs text-adm-accent-ink">{fieldError("saleType")}</p>}
+                  {credit && (
+                    <div className="grid gap-4 border border-adm-line bg-adm-panel-2 p-3 sm:grid-cols-2">
+                      <Field label="Paid now" hint="0 if nothing is paid today." error={fieldError("upfrontAmount")}>
+                        <NumberInput
+                          value={form.upfrontAmount}
+                          integer={false}
+                          min={0}
+                          prefix="Rs."
+                          disabled={!draft}
+                          onChange={(upfrontAmount) => update({ upfrontAmount })}
+                        />
+                      </Field>
+                      <Field label="Paid by">
+                        <Select
+                          value={form.upfrontMethod}
+                          disabled={!draft || !(form.upfrontAmount ?? 0)}
+                          options={PAYMENT_METHODS.map((m) => ({ value: m.value, label: m.label }))}
+                          onChange={(e) => update({ upfrontMethod: e.target.value as PaymentMethod })}
+                        />
+                      </Field>
+                      <Field label="Balance due in (days)" required error={fieldError("creditDays")} className="sm:col-span-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <NumberInput value={form.creditDays} min={1} max={365} suffix="days" disabled={isVoid} className="w-32" onChange={(creditDays) => update({ creditDays })} />
+                          {!isVoid &&
+                            CREDIT_DAY_CHOICES.map((days) => (
+                              <button
+                                key={days}
+                                type="button"
+                                aria-pressed={form.creditDays === days}
+                                onClick={() => update({ creditDays: days })}
+                                className={`h-7 border px-2 font-mono text-[10.5px] font-semibold tracking-[0.04em] uppercase transition-colors ${
+                                  form.creditDays === days ? "border-adm-ink bg-adm-ink text-white" : "border-adm-line-strong bg-adm-panel text-adm-ink-2 hover:border-adm-ink"
+                                }`}
+                              >
+                                {days} days
+                              </button>
+                            ))}
+                        </div>
+                      </Field>
+                      {draft && totals && (
+                        <p className="text-[13px] leading-5 text-adm-ink-2 sm:col-span-2">
+                          Balance on credit: <span className="font-mono font-semibold text-adm-ink">{formatRs(creditBalance)}</span>
+                          {form.dueDate ? (
+                            <>
+                              {" "}— due <span className="font-semibold text-adm-ink">{form.dueDate}</span>. You&apos;ll get an alert in the admin when it falls due.
+                            </>
+                          ) : (
+                            " — enter the days to set the due date."
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {!draft && form.saleType && form.saleType !== "credit" && (
+                    <p className="text-[13px] text-adm-ink-2">Paid in full by {saleTypeLabel(form.saleType).toLowerCase()} at the sale.</p>
+                  )}
+                </>
               )}
             </div>,
           )}
@@ -1032,6 +1152,14 @@ export function InvoiceEditor({
                 ? `${trackedUnits} tracked unit${trackedUnits === 1 ? "" : "s"} come${trackedUnits === 1 ? "s" : ""} out of stock.`
                 : "Stock doesn't change."}
             </li>
+            {form.saleType === "credit" ? (
+              <li>
+                {(form.upfrontAmount ?? 0) > 0 ? `${formatRs(form.upfrontAmount ?? 0)} paid now is recorded; ` : "Nothing is recorded as paid yet; "}
+                the balance of {formatRs(creditBalance)} is due {form.dueDate ?? "—"}.
+              </li>
+            ) : form.saleType ? (
+              <li>{formatRs(totals?.total ?? 0)} is recorded as paid by {saleTypeLabel(form.saleType).toLowerCase()}.</li>
+            ) : null}
             <li>Quantities, prices, discount and VAT / tax are then fixed; client details, notes and serial numbers stay editable.</li>
           </ul>
         </div>
@@ -1041,7 +1169,7 @@ export function InvoiceEditor({
         open={dialog === "revert"}
         onClose={() => setDialog(null)}
         title={`Move ${form.number ?? "this invoice"} back to draft?`}
-        description={`It keeps its number. ${form.stockDeducted ? "The stock it took goes back until you issue it again. " : ""}Use this to change quantities, prices, the discount or VAT / tax.`}
+        description={`It keeps its number. ${form.stockDeducted ? "The stock it took goes back until you issue it again. " : ""}${payments.some((p) => p.source === "sale") ? "The payment recorded at the sale is removed and recorded again when you re-issue. " : ""}Use this to change quantities, prices, the discount, VAT / tax or how it is paid.`}
         confirmLabel="Back to draft"
         onConfirm={async () => {
           if (form.id == null) return { ok: false, message: "Nothing to change." };

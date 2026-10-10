@@ -37,6 +37,7 @@ import {
   INVOICE_WRITE,
   INVOICES_MIGRATION,
   invoiceDisplayStatus,
+  isInvoiceListFilter,
   type InvoiceListFilter,
   type InvoiceListRow,
   type InvoiceRpcResult,
@@ -65,8 +66,18 @@ export default function InvoicesTab() {
   const fromOrder = fromOrderParam && /^DO-\d{1,12}$/i.test(fromOrderParam) ? fromOrderParam.toUpperCase() : null;
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<InvoiceListFilter>("all");
+  // ?filter=due (the due-payments alert links here) picks the list filter; the select changes it after
   const [page, setPage] = useState(1);
+  const filterParam = useAdminParam("filter");
+  const [filter, setFilter] = useState<InvoiceListFilter>(isInvoiceListFilter(filterParam) ? filterParam : "all");
+  const [seenFilterParam, setSeenFilterParam] = useState(filterParam);
+  if (filterParam !== seenFilterParam) {
+    setSeenFilterParam(filterParam);
+    if (isInvoiceListFilter(filterParam)) {
+      setFilter(filterParam);
+      setPage(1);
+    }
+  }
   const [sort, setSort] = useState<SortState>({ key: "issue_date", direction: "desc" });
   const [templateOpen, setTemplateOpen] = useState(false);
   const [deleting, setDeleting] = useState<InvoiceListRow | null>(null);

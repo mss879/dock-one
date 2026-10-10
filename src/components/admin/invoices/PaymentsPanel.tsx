@@ -122,6 +122,9 @@ export function PaymentsPanel({
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-semibold text-adm-ink">
                   {formatRs(payment.amount)} <span className="font-normal text-adm-ink-2">· {paymentMethodLabel(payment.method)}</span>
+                  {payment.source === "sale" && (
+                    <span className="ml-2 bg-adm-accent-soft px-1.5 py-0.5 align-middle font-mono text-[10px] font-semibold tracking-[0.06em] text-adm-accent-ink uppercase">At the sale</span>
+                  )}
                 </p>
                 <p className="text-xs text-adm-mute">
                   {formatInvoiceDate(payment.paidOn)}

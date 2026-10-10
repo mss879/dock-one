@@ -73,8 +73,9 @@ run in production mode without the Supabase URL and anon key.
 
 - **Demo catalogue** (seed 30: 16 products with one "Standard" variant each, no stock tracking) —
   replace with real products in admin → Products, or delete with the statement in the seed's header.
-- **Placeholder contact details** (seed 31): phone +94 11 234 5678, WhatsApp +94 77 123 4567,
-  hello@dockone.lk, "No. 42, Galle Road, Colombo 03" — admin → Store settings.
+- **Contact details** are the client's real ones once `37_seed_contact_details.sql` is run
+  (+94 76 074 4952 for phone and WhatsApp, info@dockonesolutions.com, No. 3F14, 3rd Floor, Unity
+  Plaza, Colombo 04). Change them any time in admin → Store settings.
 - **Domain** — `https://dockonesolutions.com` (the fallback when `NEXT_PUBLIC_SITE_URL` is unset; set it to the
   same value on the host so sitemap, canonical and share-image URLs all use it).
 - **OPENING10** (seed 32) — keep only if the offer is real.
