@@ -104,7 +104,12 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.admin_invoice_summary()',                                   '26_invoices'),
   ('public.admin_save_invoice_sale(jsonb,jsonb,jsonb)',                '28_invoice_sale_types'),
   ('public.admin_invoice_due_alerts(integer)',                         '28_invoice_sale_types'),
-  ('public.admin_expense_summary(date,date)',                          '29_expenses');
+  ('public.admin_expense_summary(date,date)',                          '29_expenses'),
+  ('public.admin_record_stock_movement(integer,text,integer,text,text,timestamp with time zone)', '38_stock_movements'),
+  ('public.admin_inventory_value_report(text,text,text,integer)',      '38_stock_movements'),
+  ('public.admin_stock_movement_report(date,date,text,text,text,integer)', '38_stock_movements'),
+  ('public.admin_stock_movement_history(integer,date,date)',           '38_stock_movements'),
+  ('public.admin_stock_report_options()',                              '38_stock_movements');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);
@@ -137,7 +142,8 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.expense_categories',      ARRAY['anon'],                  '29_expenses'),
   ('public.expenses',                ARRAY['anon'],                  '29_expenses'),
   ('public.product_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
-  ('public.variant_sourcing',        ARRAY['anon'],                  '34_seed_inventory');
+  ('public.variant_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
+  ('public.stock_movements',         ARRAY['anon'],                  '38_stock_movements');
 
 -- ── the lists themselves are valid ──────────────────────────────────────────
 SELECT pg_temp.eq((SELECT string_agg(fn || ' (' || migration || ')', ', ' ORDER BY fn)

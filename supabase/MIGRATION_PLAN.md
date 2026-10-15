@@ -27,6 +27,11 @@ what to do right after, and how to check it worked.
 > info@dockonesolutions.com, No. 3F14, 3rd Floor, Unity Plaza, Colombo 04). If you ever re-run `26`,
 > run `28` again after it (28 replaces one of 26's functions).
 
+> **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
+> ledger** and the two inventory reports (inventory value, product-wise stock movement) in
+> admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
+> stock on hand as its opening balance the first time it runs — movement reports start then.
+
 ---
 
 ## 0. Before the first migration
@@ -467,6 +472,27 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   (this month, last month, 30 / 90 days, this year, custom) and category, totals, a by-category
   breakdown, CSV export, and **Categories** to add, rename, reorder or switch them off.
 - **Check:** `SELECT count(*) FROM public.expense_categories;` → `12`.
+
+### 38 — Stock movements and inventory reports · `38_stock_movements.sql`
+- **Adds:** `stock_movements` — one row per change of physical stock of a tracked variant (date/time,
+  movement type, stock in / stock out, the web order or invoice it came from or a typed reference, a
+  note, the admin who recorded it), `order_items.stock_reserved`, triggers that post every stock
+  change (a web order is a **sale when it goes out** — out for delivery / delivered / collected — not
+  when it is placed; an issued invoice is a sale; cancelling after hand-over, back to draft and void
+  post the reversal; any other stock edit is an adjustment), `admin_record_stock_movement` and four
+  report functions. Admins only; nobody can edit or delete a movement.
+- **Needs:** 01–37 (orders 07/09, invoices 26/28, inventory 05).
+- **Switches on:** admin → Reports → **Inventory value** (stock on hand × current selling price per
+  variant, total "Stock Value at Selling Price") and **Stock movement** (opening, received, sales,
+  customer returns, supplier returns, adjustments +/−, closing and its value for any period, with a
+  movement history per product). Filters: product / SKU, category, brand (+ date range); Excel, PDF and
+  print. Admin → Inventory → **Record movement** for deliveries, customer returns, supplier returns
+  and adjustments.
+- **Right after:** nothing. The first run records the current stock as the opening balance (dated
+  then), so movement figures start from that moment. A selling price of 0 shows as "Price missing".
+- **Check:** `SELECT value FROM public.app_config WHERE name = 'stock_ledger_started';` → a date, and
+  `SELECT count(*) FROM public.stock_movements WHERE movement_type = 'opening';` → the number of
+  tracked variants with stock.
 
 ---
 

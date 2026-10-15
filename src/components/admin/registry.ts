@@ -135,7 +135,7 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     group: "Commerce",
     icon: ChartColumn,
     owner: "WP-H",
-    summary: "Sales and order reports for any Sri Lanka date range, exported as CSV or printed to PDF.",
+    summary: "Sales and order reports for any Sri Lanka date range; inventory value and product-wise stock movement at selling prices — Excel, PDF and print.",
     load: () => import("./tabs/ReportsTab"),
   },
   {
@@ -171,7 +171,7 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     group: "Catalogue",
     icon: Boxes,
     owner: "WP-K",
-    summary: "Stock level and low-stock threshold per variant, low stock first, edited inline.",
+    summary: "Stock level and low-stock threshold per variant, low stock first, edited inline; record deliveries, returns and adjustments for the stock movement report.",
     load: () => import("./tabs/InventoryTab"),
   },
   {

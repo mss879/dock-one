@@ -1,10 +1,11 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { ArrowLeftRight, Download } from "lucide-react";
 import { useState } from "react";
 import { InlineNumber } from "@/components/admin/catalogue/InlineNumber";
 import { Thumb, categoryLabel, useCatalogueLookups } from "@/components/admin/catalogue/shared";
 import { getAdminTab } from "@/components/admin/registry";
+import { RecordMovementModal, type RecordTarget } from "@/components/admin/reports/RecordMovementModal";
 import {
   AdminButton,
   AdminPagination,
@@ -41,7 +42,9 @@ import { getBrowserSupabase } from "@/lib/supabase/browser";
  * Admin → Catalogue → Inventory (blueprint §11.2, §12.4): one row per variant, low stock first
  * (tracked AND stock ≤ threshold), stock and threshold edited in place, tracking switched on/off.
  * Direct writes to `inventory` (05) under admin RLS with the error + row-count checks of
- * lib/admin/write. No row = not tracked = always sells.
+ * lib/admin/write. No row = not tracked = always sells. Every stock change lands in the stock
+ * movement ledger (38): "Record movement" posts a delivery / return / adjustment with its
+ * reference; editing the number in place is logged as an adjustment.
  */
 
 type InventoryDbRow = { variant_id: number; stock_level: number; low_stock_threshold: number; updated_at: string };
@@ -60,6 +63,7 @@ export default function InventoryTab() {
   const [busyVariant, setBusyVariant] = useState<number | null>(null);
   const [untracking, setUntracking] = useState<AdminInventoryRow | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [recording, setRecording] = useState<RecordTarget | null>(null);
 
   const { from, to } = pageRange(page);
   const list = useAdminQuery(
@@ -140,9 +144,14 @@ export default function InventoryTab() {
         title={tab.label}
         description={tab.summary}
         actions={
-          <AdminButton icon={<Download aria-hidden className="size-3.5" />} loading={exporting} onClick={() => void exportCsv()}>
-            Export CSV
-          </AdminButton>
+          <>
+            <AdminButton icon={<ArrowLeftRight aria-hidden className="size-3.5" />} onClick={() => setRecording({ variantId: null })}>
+              Record movement
+            </AdminButton>
+            <AdminButton icon={<Download aria-hidden className="size-3.5" />} loading={exporting} onClick={() => void exportCsv()}>
+              Export CSV
+            </AdminButton>
+          </>
         }
       />
 
@@ -169,7 +178,8 @@ export default function InventoryTab() {
           />
           <p className="-mt-1 mb-3 text-xs leading-5 text-adm-mute">
             Low stock first: on-sale variants at or below their alert level (the dashboard uses the same rule). Variants without tracking always sell.
-            Edit a number and press Enter — the list re-sorts when it reloads.
+            Edit a number and press Enter — the list re-sorts when it reloads. Deliveries, returns and damage: use “Record movement” so the stock movement
+            report shows them with their reference (a number edited here is logged as an adjustment).
           </p>
         </div>
         <DataTable
@@ -291,6 +301,15 @@ export default function InventoryTab() {
           <AdminPagination page={page} pageSize={ADMIN_PAGE_SIZE} total={list.data?.total ?? 0} onPageChange={setPage} loading={list.loading} noun="variants" />
         </div>
       </SectionCard>
+
+      <RecordMovementModal
+        target={recording}
+        onClose={() => setRecording(null)}
+        onSaved={() => {
+          setRecording(null);
+          list.refetch();
+        }}
+      />
 
       <ConfirmDialog
         open={untracking != null}

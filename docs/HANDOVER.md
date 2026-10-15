@@ -31,10 +31,13 @@ the build contract is `docs/build/BUILD_SPEC.md`.
 
 **Admin panel** (`/admin`, sign in at `/admin/signin`; only accounts with the admin flag):
 Dashboard · Orders (status changes email the customer on "out for delivery" and "delivered";
-payments; tracking; invoice and packing-slip printing) · Discounts · Abandoned carts · Reports (CSV
-and print) · Products (variants, stock, images, specs) · Categories · Collections · Inventory ·
+payments; tracking; invoice and packing-slip printing) · Discounts · Abandoned carts · Reports (sales
+and orders as CSV and print; **inventory value** and **product-wise stock movement** at selling prices
+as Excel, PDF and print, 38) · Products (variants, stock, images, specs) · Categories · Collections · Inventory ·
 Reviews (moderation) · Customers · Inquiries (reply by email) · Subscribers (mailing-list export) ·
 Finder insights · Assistant insights · Homepage · Pages & blog · Store settings · Site lock ·
+**Record movement** in Inventory (deliveries, customer / supplier returns, adjustments — every stock
+change is kept in the stock movement ledger) ·
 **Invoices** (the client's invoice layout as a live A4 preview beside the editor; products added by
 name or by scanning a unit's serial number; one serial box per unit; gapless numbers given on issue;
 stock taken on issue; payments, overdue tracking, print / save as PDF; "Create invoice" from an order) ·

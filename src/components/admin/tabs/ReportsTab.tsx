@@ -6,6 +6,8 @@ import { ANALYTICS_MIGRATION, normalizeSalesOverview } from "@/components/admin/
 import { formatCount, KpiRow } from "@/components/admin/dashboard/sections";
 import { customerName, normalizeAdminOrder, ORDERS_MIGRATION, type AdminOrder } from "@/components/admin/orders/types";
 import { getAdminTab } from "@/components/admin/registry";
+import { InventoryValueReport } from "@/components/admin/reports/InventoryValueReport";
+import { StockMovementReport } from "@/components/admin/reports/StockMovementReport";
 import {
   ExportTooLargeError,
   fetchItemsInRange,
@@ -27,6 +29,7 @@ import {
   SectionCard,
   StatusBadge,
   TabHeader,
+  Tabs,
   Toolbar,
 } from "@/components/admin/ui";
 import { downloadCsv, toCsv } from "@/lib/admin/csv";
@@ -36,7 +39,7 @@ import { ADMIN_PAGE_SIZE, pageRange } from "@/lib/admin/pagination";
 import { printReport } from "@/lib/admin/print";
 import { AdminDataError, unwrapPage, unwrapRpc, useAdminQuery } from "@/lib/admin/query";
 import { adminToast } from "@/lib/admin/toast";
-import { setAdminParams } from "@/lib/admin/url";
+import { setAdminParams, useAdminParam } from "@/lib/admin/url";
 import { orderStatusLabel, orderStatusTone, paymentStatusLabel } from "@/lib/orders";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 
@@ -66,8 +69,37 @@ function clampRange(value: DateRangeValue): { range: DateRangeValue; clamped: bo
   return { range: { ...value, from: addDays(value.to, -(MAX_REPORT_DAYS - 1)) }, clamped: true };
 }
 
+type ReportKind = "sales" | "inventory-value" | "stock-movement";
+const REPORT_KINDS: readonly ReportKind[] = ["sales", "inventory-value", "stock-movement"];
+
+/**
+ * Three reports under one tab (deep link: /admin?tab=reports&report=inventory-value|stock-movement):
+ * sales & orders, inventory value and product-wise stock movement (38_stock_movements).
+ */
 export default function ReportsTab() {
   const tab = getAdminTab("reports");
+  const param = useAdminParam("report");
+  const kind: ReportKind = REPORT_KINDS.includes(param as ReportKind) ? (param as ReportKind) : "sales";
+  return (
+    <>
+      <TabHeader eyebrow={tab.group} title={tab.label} description={tab.summary} />
+      <Tabs
+        label="Report"
+        value={kind}
+        onChange={(next) => setAdminParams({ report: next === "sales" ? null : next }, { replace: true })}
+        items={[
+          { key: "sales", label: "Sales & orders" },
+          { key: "inventory-value", label: "Inventory value" },
+          { key: "stock-movement", label: "Stock movement" },
+        ]}
+      >
+        {kind === "inventory-value" ? <InventoryValueReport /> : kind === "stock-movement" ? <StockMovementReport /> : <SalesReports />}
+      </Tabs>
+    </>
+  );
+}
+
+function SalesReports() {
   const [range, setRange] = useState<DateRangeValue>(() => rangeValue("30d"));
   const [clamped, setClamped] = useState(false);
   const [page, setPage] = useState(1);
@@ -203,8 +235,6 @@ export default function ReportsTab() {
 
   return (
     <>
-      <TabHeader eyebrow={tab.group} title={tab.label} description={tab.summary} />
-
       <SectionCard padded={false} className="mb-5">
         <div className="p-4 pb-1">
           <Toolbar dateRange={{ value: range, onChange: changeRange }} actions={exportButtons} />

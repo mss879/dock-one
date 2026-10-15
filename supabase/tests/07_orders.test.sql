@@ -17,8 +17,8 @@ SELECT pg_temp.eq((SELECT string_agg(column_name, ',' ORDER BY ordinal_position)
                   'orders has exactly the documented columns');
 SELECT pg_temp.eq((SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns
                     WHERE table_schema = 'public' AND table_name = 'order_items'),
-                  'id,order_id,product_id,variant_id,quantity,unit_price,product_name,brand,variant_name,sku,image_url,created_at',
-                  'order_items has exactly the documented columns');
+                  'id,order_id,product_id,variant_id,quantity,unit_price,product_name,brand,variant_name,sku,image_url,created_at,stock_reserved',
+                  'order_items has exactly the documented columns (stock_reserved is 38''s)');
 SELECT pg_temp.eq((SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns
                     WHERE table_schema = 'public' AND table_name = 'order_tracking'),
                   'id,order_id,status,location,description,created_at', 'order_tracking has exactly the documented columns');
