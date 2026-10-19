@@ -3,7 +3,9 @@
 import { RefreshCw, RotateCcw, Save } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { InfoLine, RichPreview, SETTINGS_MIGRATION, SETTINGS_WRITE, useStoreSettingsRow } from "@/components/admin/homepage/shared";
+import { useAdminAccess } from "@/components/admin/access";
 import { getAdminTab } from "@/components/admin/registry";
+import { ImageOptimiser } from "@/components/admin/settings/ImageOptimiser";
 import { formFromRow, patchFromForm, validateSettings, type SettingsErrors, type SettingsForm } from "@/components/admin/settings/settings-form";
 import {
   AdminButton,
@@ -53,6 +55,7 @@ function Warning({ children }: { children: ReactNode }) {
 }
 
 export default function SettingsTab() {
+  const access = useAdminAccess();
   const tab = getAdminTab("settings");
   const query = useStoreSettingsRow(["settings-tab"]);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -386,6 +389,8 @@ export default function SettingsTab() {
           </div>
           {form.returnsWindowDays === 0 && <div className="mt-3"><Warning>Homepage lines that mention the returns window are hidden while it is 0 days.</Warning></div>}
         </SectionCard>
+
+        {access.isAdmin && <ImageOptimiser />}
       </div>
     </>
   );

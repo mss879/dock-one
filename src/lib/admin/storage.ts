@@ -14,8 +14,8 @@ import { describeAdminError, NOT_CONFIGURED_MESSAGE } from "./errors";
  *
  * Buckets (04_catalogue.sql): public, raster only, 5 MB cap, admin-only writes.
  * File names are unique (never overwritten), so the CDN can't serve a stale image after a
- * replace. Browsers that can't ENCODE WebP (older Safari) get JPEG — or PNG when the source
- * may be transparent, so a product cut-out keeps its alpha.
+ * replace. Browsers that can't ENCODE WebP (Safari) get JPEG — or, for a picture that really
+ * has see-through pixels (a product cut-out), a PNG no larger than 1200 px.
  *
  * Removing an image from a form does NOT delete the file: save the row first, then (optionally)
  * `removeImage(url)` for the URLs that are no longer referenced (see `unreferencedImages`).
@@ -100,6 +100,46 @@ async function decode(file: Blob): Promise<{ source: CanvasImageSource; width: n
   }
 }
 
+/** Long side of a PNG cut-out when the browser can't make WebP — cut-outs show at ≤ 600 CSS px. */
+const PNG_MAX_DIMENSION = 1200;
+
+/** True when any pixel is not fully opaque (a cut-out), false for a photo with a solid background. */
+function hasTransparency(context: CanvasRenderingContext2D, width: number, height: number): boolean {
+  try {
+    const { data } = context.getImageData(0, 0, width, height);
+    for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true;
+    return false;
+  } catch {
+    return true; // can't read the pixels: keep the alpha to be safe
+  }
+}
+
+function scaledCopy(source: HTMLCanvasElement, width: number, height: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(source, 0, 0, width, height);
+  }
+  return canvas;
+}
+
+let webpSupport: Promise<boolean> | null = null;
+/** Whether this browser can ENCODE WebP (Chrome, Edge, Firefox: yes; Safari: no). */
+export function canEncodeWebp(): Promise<boolean> {
+  webpSupport ??= (async () => {
+    if (typeof document === "undefined") return false;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 2;
+    const blob = await canvasToBlob(canvas, "image/webp", 0.8);
+    return blob?.type === "image/webp";
+  })();
+  return webpSupport;
+}
+
 /** Convert an image file to WebP (or the fallback), scaled so the long side ≤ maxDimension. */
 export async function convertImage(file: Blob, options: { maxDimension?: number; quality?: number } = {}): Promise<Encoded> {
   const maxDimension = Math.max(64, Math.min(options.maxDimension ?? DEFAULT_MAX_DIMENSION, 4096));
@@ -126,12 +166,17 @@ export async function convertImage(file: Blob, options: { maxDimension?: number;
         if (webp.size <= MAX_UPLOAD_BYTES || q === 0.6) return { blob: webp, width, height, extension: "webp" };
         continue;
       }
-      break; // this browser can't encode WebP
+      break; // this browser can't encode WebP (Safari)
     }
+    // No WebP: a photo becomes JPEG. Only a picture that really has see-through pixels stays PNG —
+    // smaller (≤ PNG_MAX_DIMENSION), because a full-size lossless PNG is 2–4 MB and every visit
+    // to the site downloads it again through the image optimiser (Supabase egress).
     const mayBeTransparent = file.type === "image/png" || file.type === "image/webp" || file.type === "image/avif" || file.type === "image/gif";
-    if (mayBeTransparent) {
-      const png = await canvasToBlob(canvas, "image/png", 1);
-      if (png && png.size <= MAX_UPLOAD_BYTES) return { blob: png, width, height, extension: "png" };
+    if (mayBeTransparent && hasTransparency(context, width, height)) {
+      const pngScale = Math.min(1, PNG_MAX_DIMENSION / Math.max(width, height));
+      const target = pngScale < 1 ? scaledCopy(canvas, Math.round(width * pngScale), Math.round(height * pngScale)) : canvas;
+      const png = await canvasToBlob(target, "image/png", 1);
+      if (png && png.size <= MAX_UPLOAD_BYTES) return { blob: png, width: target.width, height: target.height, extension: "png" };
     }
     const jpeg = await canvasToBlob(canvas, "image/jpeg", Math.min(quality, 0.85));
     if (!jpeg) throw new Error("encode failed");

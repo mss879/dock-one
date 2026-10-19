@@ -534,6 +534,12 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   `ping_product_view` for the "N other people are looking at this" note on product pages.
 - **Check:** `SELECT phone, whatsapp FROM public.store_settings;`
 
+### 43 — Image sizes · `43_image_housekeeping.sql`
+- **Adds:** owner-only `admin_image_references` and `admin_replace_image_url`, used by
+  Store settings → **Image sizes** to swap heavy images for smaller WebP copies everywhere they are
+  used (products, categories, homepage, pages, past order lines). Lowers Supabase cached egress.
+- **Check:** `SELECT proname FROM pg_proc WHERE proname IN ('admin_image_references', 'admin_replace_image_url');`
+
 ---
 
 ## 3. Demo content (seeds 30–33) — optional, replace before launch

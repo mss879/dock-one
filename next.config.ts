@@ -69,6 +69,13 @@ export default function config(phase: string): NextConfig {
       formats: ["image/avif", "image/webp"],
       // Next 16 only serves qualities on this allowlist (default is [75]).
       qualities: [75, 90],
+      // Fewer widths than Next's 15 defaults: each width is a separate optimiser job, and on a cache
+      // miss (every deploy, every edge) the optimiser downloads the ORIGINAL from Supabase storage —
+      // that download is the project's "cached egress". 10 widths still cover phone → 2× desktop.
+      deviceSizes: [640, 828, 1080, 1440, 1920, 2560],
+      imageSizes: [64, 128, 256, 384],
+      // Storage file names never change (a new upload is a new name), so optimised copies can live long.
+      minimumCacheTTL: 2678400,
       // Pinned to OUR project's public storage — never a wildcard (the optimiser would become a free proxy).
       remotePatterns: supabase
         ? [
