@@ -27,6 +27,13 @@ what to do right after, and how to check it worked.
 > info@dockonesolutions.com, No. 3F14, 3rd Floor, Unity Plaza, Colombo 04). If you ever re-run `26`,
 > run `28` again after it (28 replaces one of 26's functions).
 
+> **Added 2026-10-19 — four new files: run 39, 40, 41, then 42** (each safe to re-run; needs 01–38):
+> `39` **staff accounts** with per-section view / edit access · `40` **receipts, quotations, website
+> invoices** and the **invoiced sales report** (invoices now take inventory products only) · `41`
+> **suppliers and warranty** per serial number · `42` the **hotline +94 71 096 0006** as the website
+> phone, and "people viewing this product". Re-run 40 after any re-run of 26 or 28, and 39 after any
+> re-run of 02.
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -493,6 +500,39 @@ for the hero phone images, invoice payment types, expenses and the real contact 
 - **Check:** `SELECT value FROM public.app_config WHERE name = 'stock_ledger_started';` → a date, and
   `SELECT count(*) FROM public.stock_movements WHERE movement_type = 'opening';` → the number of
   tracked variants with stock.
+
+### 39 — Staff accounts and access · `39_staff_accounts.sql`
+- **Adds:** `staff_accounts` (name, permissions per admin section: view / edit, active) and the
+  section map the database uses to check every staff request; `is_admin()` now lets staff through
+  only for the sections ticked for them. Staff never delete anything; cost prices need "Cost prices".
+- **Switches on:** admin → Settings → **Staff**: create a staff sign-in (email + password, no email
+  sent), tick sections (None / View / Edit), reset the password, switch the account off.
+- **Check:** `SELECT count(*) FROM public.staff_api_map;` → more than 100.
+
+### 40 — Receipts, quotations, website invoices, sales report · `40_sales_documents.sql`
+- **Adds:** numbered receipts (every payment; existing payments become RCT-00001…; voided by an admin
+  with a reason, never deleted; advances linked later), quotations (QT- numbers, own terms, validity,
+  custom lines allowed, converted into a new invoice — custom lines matched by an admin), the
+  inventory-only rule for invoices, web orders invoiced automatically in the same INV- numbering
+  when handed over (payment → receipt; cancel → void with reason), quotation requests from the
+  website, the thank-you email flag and `admin_sales_report`.
+- **Switches on:** admin → **Quotations**, **Receipts**, Reports → **Invoiced sales**; the
+  storefront **Request a quotation** (product page and basket) and `/quotation/…` links.
+- **Right after:** Invoices → Template & numbering: check the quotation prefix, validity and terms,
+  and the receipt prefix.
+- **Check:** `SELECT count(*) FROM public.invoice_payments WHERE receipt_number IS NULL;` → `0`.
+
+### 41 — Suppliers and warranty · `41_suppliers_warranty.sql`
+- **Adds:** `suppliers`, supplier + month on "Stock received", and a warranty record per serial
+  number (supplier warranty and customer warranty — start, expiry, coverage — the customer one filled
+  in on sale).
+- **Switches on:** admin → **Suppliers**, **Warranty**; Inventory → Record movement → supplier fields.
+- **Check:** `SELECT count(*) FROM public.suppliers;`
+
+### 42 — Hotline and "people viewing" · `42_storefront_extras.sql`
+- **Adds:** the store phone becomes **+94 71 096 0006** (once; edit it any time in Store settings);
+  `ping_product_view` for the "N other people are looking at this" note on product pages.
+- **Check:** `SELECT phone, whatsapp FROM public.store_settings;`
 
 ---
 

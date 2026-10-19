@@ -3,8 +3,8 @@
 \ir _helpers.sql
 
 SELECT pg_temp.eq((SELECT format('%s|%s|%s|%s|%s', phone, whatsapp, email, address, pickup_address) FROM public.store_settings),
-                  '+94 76 074 4952|+94 76 074 4952|info@dockonesolutions.com|No. 3F14, 3rd Floor, Unity Plaza, Colombo 04|No. 3F14, 3rd Floor, Unity Plaza, Colombo 04',
-                  'phone, WhatsApp, email, address and pickup address are the real ones');
+                  '+94 71 096 0006|+94 76 074 4952|info@dockonesolutions.com|No. 3F14, 3rd Floor, Unity Plaza, Colombo 04|No. 3F14, 3rd Floor, Unity Plaza, Colombo 04',
+                  'phone (since 42: the hotline), WhatsApp, email, address and pickup address are the real ones');
 SELECT pg_temp.eq((SELECT pickup_note FROM public.store_settings), 'Collect in Colombo 04, same day', 'the pickup note names Colombo 04');
 SELECT pg_temp.ok((SELECT data::text NOT LIKE '%Colombo 03%' FROM public.content_blocks WHERE key = 'order_your_way'),
                   'the "Order your way" block no longer says Colombo 03');

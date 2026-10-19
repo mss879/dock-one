@@ -26,6 +26,16 @@ export { fetchUnitsForProducts, SERIALS_MIGRATION, serialState, type SerialState
 // ── Migration, limits, vocabularies ───────────────────────────────────────────
 
 export const INVOICES_MIGRATION = "26_invoices.sql";
+/** Quotations, receipts, website invoices, the inventory-only rule (40). */
+export const DOCS_MIGRATION = "40_sales_documents.sql";
+
+/** An invoice (a sale) or a quotation (an offer: own numbers, custom lines allowed, no payments). */
+export type DocType = "invoice" | "quotation";
+export type SalesChannel = "store" | "website";
+
+export function docNoun(docType: DocType): string {
+  return docType === "quotation" ? "quotation" : "invoice";
+}
 /** Issuing / back-to-draft / void move stock, which the storefront shows. */
 export const INVOICE_STOCK_TAGS: CacheTag[] = ["catalogue"];
 
@@ -71,6 +81,15 @@ export const PAYMENT_METHODS: readonly { value: PaymentMethod; label: string }[]
 export function paymentMethodLabel(method: string): string {
   return PAYMENT_METHODS.find((m) => m.value === method)?.label ?? "Other";
 }
+
+/** How a receipt can be paid (40): the client's four methods. */
+export type ReceiptMethod = "cash" | "card" | "cheque" | "bank_transfer";
+export const RECEIPT_METHODS: readonly { value: ReceiptMethod; label: string }[] = [
+  { value: "cash", label: "Cash" },
+  { value: "card", label: "Card" },
+  { value: "cheque", label: "Cheque" },
+  { value: "bank_transfer", label: "Bank transfer" },
+];
 
 /**
  * How the sale is paid (28_invoice_sale_types): cash / card = in full at the sale; credit = part now
@@ -277,6 +296,14 @@ export type InvoiceSettings = {
   closingTitle: string;
   closingLine: string;
   footerTagline: string;
+  /** Quotations and receipts (40). */
+  quotePrefix: string;
+  quoteNextNumber: number;
+  quoteValidDays: number;
+  quoteNotes: string[];
+  receiptPrefix: string;
+  receiptDigits: number;
+  receiptNextNumber: number;
   updatedAt: string | null;
 };
 
@@ -315,6 +342,13 @@ export function normalizeInvoiceSettings(row: Row | null | undefined): InvoiceSe
     closingTitle: str(r.closing_title),
     closingLine: str(r.closing_line),
     footerTagline: str(r.footer_tagline),
+    quotePrefix: typeof r.quote_prefix === "string" ? r.quote_prefix : "QT-",
+    quoteNextNumber: Math.max(1, num(r.quote_next_number, 1)),
+    quoteValidDays: Math.min(365, Math.max(1, num(r.quote_valid_days, 14))),
+    quoteNotes: strList(r.quote_notes),
+    receiptPrefix: typeof r.receipt_prefix === "string" ? r.receipt_prefix : "RCT-",
+    receiptDigits: Math.min(10, Math.max(1, num(r.receipt_digits, 5))),
+    receiptNextNumber: Math.max(1, num(r.receipt_next_number, 1)),
     updatedAt: strOrNull(r.updated_at),
   };
 }
@@ -348,6 +382,18 @@ export type InvoiceLine = {
 
 export type InvoiceForm = {
   id: number | null;
+  /** Invoice or quotation (40); a draft may switch, a numbered document can't. */
+  docType: DocType;
+  channel: SalesChannel;
+  /** Quotations: valid until (the issue date + the template's validity when issued). */
+  validUntil: string | null;
+  billToCompany: string;
+  /** A website request's note (quotations) — read-only here. */
+  requestNote: string | null;
+  /** Invoice made from this quotation / quotation this invoice was made from. */
+  convertedInvoiceId: number | null;
+  quotationId: number | null;
+  thankYouSentAt: string | null;
   number: string | null;
   status: InvoiceStatus;
   paymentStatus: InvoicePaymentStatus;
@@ -401,6 +447,15 @@ export type InvoicePayment = {
   /** "sale" = recorded automatically when the invoice was issued (28); "manual" = Record payment. */
   source: "manual" | "sale";
   createdAt: string | null;
+  /** Receipts (40): numbered, never deleted — voided by an admin with a reason. */
+  receiptNumber: string | null;
+  invoiceId: number | null;
+  payerName: string | null;
+  cardAccount: string | null;
+  chequeNumber: string | null;
+  status: "valid" | "void";
+  voidReason: string | null;
+  voidedAt: string | null;
 };
 
 let lineCounter = 0;
@@ -426,9 +481,18 @@ export function emptyLine(patch: Partial<InvoiceLine> = {}): InvoiceLine {
 }
 
 /** A new draft as the settings say it starts (the database applies the same defaults). */
-export function emptyInvoiceForm(settings: InvoiceSettings | null, today: string = todayYmd()): InvoiceForm {
+export function emptyInvoiceForm(settings: InvoiceSettings | null, today: string = todayYmd(), docType: DocType = "invoice"): InvoiceForm {
+  const quote = docType === "quotation";
   return {
     id: null,
+    docType,
+    channel: "store",
+    validUntil: quote ? addDays(today, settings?.quoteValidDays ?? 14) : null,
+    billToCompany: "",
+    requestNote: null,
+    convertedInvoiceId: null,
+    quotationId: null,
+    thankYouSentAt: null,
     number: null,
     status: "draft",
     paymentStatus: "unpaid",
@@ -444,16 +508,16 @@ export function emptyInvoiceForm(settings: InvoiceSettings | null, today: string
     billToPhone: "",
     billToEmail: "",
     paymentTerms: settings?.defaultPaymentTerms ?? "",
-    notes: settings ? [...settings.defaultNotes] : [],
+    notes: settings ? [...(quote ? settings.quoteNotes : settings.defaultNotes)] : [],
     showBankDetails: settings?.defaultShowBankDetails ?? false,
     discountType: "amount",
     discountValue: 0,
     taxType: "percent",
     taxValue: settings?.defaultTaxRate ?? 0,
-    deductStock: settings?.defaultDeductStock ?? true,
+    deductStock: quote ? false : (settings?.defaultDeductStock ?? true),
     internalNote: "",
     lines: [],
-    saleType: "cash",
+    saleType: quote ? null : "cash",
     upfrontAmount: 0,
     upfrontMethod: "cash",
     creditDays: settings?.defaultDueDays != null && settings.defaultDueDays > 0 ? settings.defaultDueDays : 30,
@@ -500,6 +564,14 @@ export function paymentFromRow(row: Row): InvoicePayment {
     note: strOrNull(row.note),
     source: row.source === "sale" ? "sale" : "manual",
     createdAt: strOrNull(row.created_at),
+    receiptNumber: strOrNull(row.receipt_number),
+    invoiceId: idOrNull(row.invoice_id),
+    payerName: strOrNull(row.payer_name),
+    cardAccount: strOrNull(row.card_account),
+    chequeNumber: strOrNull(row.cheque_number),
+    status: row.status === "void" ? "void" : "valid",
+    voidReason: strOrNull(row.void_reason),
+    voidedAt: strOrNull(row.voided_at),
   };
 }
 
@@ -513,6 +585,14 @@ function normalizeMethod(value: unknown): PaymentMethod {
 export function formFromRows(invoice: Row, items: Row[]): InvoiceForm {
   return {
     id: idOrNull(invoice.id),
+    docType: invoice.doc_type === "quotation" ? "quotation" : "invoice",
+    channel: invoice.channel === "website" ? "website" : "store",
+    validUntil: strOrNull(invoice.valid_until),
+    billToCompany: str(invoice.bill_to_company),
+    requestNote: strOrNull(invoice.request_note),
+    convertedInvoiceId: idOrNull(invoice.converted_invoice_id),
+    quotationId: idOrNull(invoice.quotation_id),
+    thankYouSentAt: strOrNull(invoice.thank_you_sent_at),
     number: strOrNull(invoice.number),
     status: normalizeStatus(invoice.status),
     paymentStatus: normalizePaymentStatus(invoice.payment_status),
@@ -564,6 +644,7 @@ export function fromRpcResult(result: InvoiceRpcResult): { form: InvoiceForm; pa
 /** Everything a save sends — "dirty" means this changed since the last save/load. */
 export function invoiceFingerprint(form: InvoiceForm): string {
   return JSON.stringify([
+    form.docType, form.docType === "quotation" ? form.validUntil : null, form.billToCompany,
     form.issueDate, form.dueDate, form.reference, form.orderId, form.customerId,
     form.billToName, form.billToAddress, form.billToCity, form.billToPostalCode, form.billToPhone, form.billToEmail,
     form.paymentTerms, form.notes, form.showBankDetails, form.discountType, form.discountValue, form.taxType, form.taxValue,
@@ -633,13 +714,22 @@ export function buildInvoiceSave(form: InvoiceForm): { p_invoice: Record<string,
   return { p_invoice: invoice, p_items: items };
 }
 
+/** p_doc for admin_save_document (40): the document type and the quotation fields. */
+export function buildDocSave(form: InvoiceForm): Record<string, unknown> {
+  return {
+    doc_type: form.docType,
+    bill_to_company: nullIfBlank(form.billToCompany),
+    ...(form.docType === "quotation" ? { valid_until: form.validUntil || null } : {}),
+  };
+}
+
 /**
  * p_sale for admin_save_invoice_sale (28), or null when there is nothing to send: a draft sends its
  * whole choice; an issued credit sale only its days (more time moves the due date); everything else
  * is fixed once issued.
  */
 export function buildSaleTerms(form: InvoiceForm): Record<string, unknown> | null {
-  if (form.saleType == null || form.status === "void") return null;
+  if (form.docType === "quotation" || form.saleType == null || form.status === "void") return null;
   if (form.status === "issued") return form.saleType === "credit" && form.creditDays != null ? { credit_days: form.creditDays } : null;
   if (form.saleType !== "credit") return { sale_type: form.saleType };
   return {
@@ -652,10 +742,10 @@ export function buildSaleTerms(form: InvoiceForm): Record<string, unknown> | nul
 
 // ── Validation (mirrors 25's checks; the database stays the authority) ────────
 
-export type LineErrors = Partial<Record<"description" | "quantity" | "unitPrice" | "serialNumbers" | "warranty", string>>;
+export type LineErrors = Partial<Record<"description" | "quantity" | "unitPrice" | "serialNumbers" | "warranty" | "product", string>>;
 export type InvoiceErrors = {
   count: number;
-  fields: Partial<Record<"saleType" | "upfrontAmount" | "creditDays" | "issueDate" | "dueDate" | "billToName" | "billToEmail" | "billToAddress" | "billToCity" | "billToPostalCode" | "billToPhone" | "reference" | "paymentTerms" | "notes" | "discount" | "tax" | "internalNote" | "lines", string>>;
+  fields: Partial<Record<"validUntil" | "billToCompany" | "saleType" | "upfrontAmount" | "creditDays" | "issueDate" | "dueDate" | "billToName" | "billToEmail" | "billToAddress" | "billToCity" | "billToPostalCode" | "billToPhone" | "reference" | "paymentTerms" | "notes" | "discount" | "tax" | "internalNote" | "lines", string>>;
   lines: Record<string, LineErrors>;
 };
 
@@ -669,7 +759,10 @@ export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boo
   if (!isYmd(form.issueDate)) fields.issueDate = "Choose the invoice date.";
   if (form.dueDate && !isYmd(form.dueDate)) fields.dueDate = "Choose a valid date, or clear it.";
   else if (form.dueDate && isYmd(form.issueDate) && form.dueDate < form.issueDate) fields.dueDate = "The due date can't be before the invoice date.";
-  if (form.saleType === "credit") {
+  if (form.docType === "quotation" && form.validUntil && (!isYmd(form.validUntil) || (isYmd(form.issueDate) && form.validUntil < form.issueDate)))
+    fields.validUntil = "Valid until can't be before the quotation date.";
+  if (tooLong(form.billToCompany, INVOICE_LIMITS.name)) fields.billToCompany = `At most ${INVOICE_LIMITS.name} characters.`;
+  if (form.docType === "invoice" && form.saleType === "credit") {
     const upfront = form.upfrontAmount ?? 0;
     if (upfront < 0 || !twoDecimals(upfront) || upfront > INVOICE_LIMITS.unitPrice * 100) fields.upfrontAmount = "Enter the amount paid now in rupees (0 if nothing).";
     else if (options.forIssue) {
@@ -724,6 +817,9 @@ export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boo
     if (line.unitPrice == null) e.unitPrice = "Enter a price (0 for no charge).";
     else if (line.unitPrice < 0 || line.unitPrice > INVOICE_LIMITS.unitPrice || !twoDecimals(line.unitPrice)) e.unitPrice = "Rs. 0 – 100,000,000.";
     if (tooLong(line.warranty, INVOICE_LIMITS.warranty)) e.warranty = `At most ${INVOICE_LIMITS.warranty} characters.`;
+    // 40: an invoice sells inventory products only (a quotation may quote anything)
+    if (form.docType === "invoice" && form.status === "draft" && line.variantId == null && !(form.orderId && form.channel === "website"))
+      e.product = "Invoices can only contain inventory products — pick this item (and its variant) from the inventory, or make a quotation.";
     if (Object.keys(e).length) lines[line.key] = e;
   }
   const count = Object.keys(fields).length + Object.values(lines).reduce((sum, e) => sum + Object.keys(e).length, 0);
@@ -747,6 +843,18 @@ export function invoiceDisplayStatus(
   return { key: "unpaid", label: "Unpaid", tone: "info" };
 }
 
+/** A quotation's badge: Valid / Expired / Converted (40_sales_documents) — never "Unpaid". */
+export function quotationDisplayStatus(
+  quote: { status: InvoiceStatus; convertedInvoiceId: number | null; validUntil: string | null },
+  today: string = todayYmd(),
+): Pick<StatusMeta, "label" | "tone"> {
+  if (quote.status === "void") return { label: "Void", tone: "danger" };
+  if (quote.convertedInvoiceId != null) return { label: "Converted", tone: "success" };
+  if (quote.validUntil && quote.validUntil < today) return { label: "Expired", tone: "warning" };
+  if (quote.status === "draft") return { label: "Draft", tone: "neutral" };
+  return { label: "Valid", tone: "info" };
+}
+
 /** "Due today", "Due in 5 days", "3 days overdue", "" when settled / no due date. */
 export function dueHint(dueDate: string | null, balanceDue: number, status: InvoiceStatus, today: string = todayYmd()): string {
   if (!dueDate || status !== "issued" || balanceDue <= 0 || !isYmd(dueDate)) return "";
@@ -762,7 +870,7 @@ function ymdTriple(ymd: string): [number, number, number] {
 
 // ── The list ──────────────────────────────────────────────────────────────────
 
-export type InvoiceListFilter = "all" | "open" | "due" | "overdue" | "paid" | "draft" | "void";
+export type InvoiceListFilter = "all" | "open" | "due" | "overdue" | "paid" | "draft" | "void" | "issued";
 export const INVOICE_LIST_FILTERS: readonly { value: InvoiceListFilter; label: string }[] = [
   { value: "all", label: "All invoices" },
   { value: "open", label: "Awaiting payment" },
@@ -779,6 +887,11 @@ export function isInvoiceListFilter(value: unknown): value is InvoiceListFilter 
 
 export type InvoiceListRow = {
   id: number;
+  docType: DocType;
+  channel: SalesChannel;
+  validUntil: string | null;
+  convertedInvoiceId: number | null;
+  billToCompany: string;
   number: string | null;
   status: InvoiceStatus;
   paymentStatus: InvoicePaymentStatus;
@@ -800,6 +913,11 @@ export type InvoiceListRow = {
 export function normalizeInvoiceListRow(row: Row): InvoiceListRow {
   return {
     id: num(row.id),
+    docType: row.doc_type === "quotation" ? "quotation" : "invoice",
+    channel: row.channel === "website" ? "website" : "store",
+    validUntil: strOrNull(row.valid_until),
+    convertedInvoiceId: idOrNull(row.converted_invoice_id),
+    billToCompany: str(row.bill_to_company),
     number: strOrNull(row.number),
     status: normalizeStatus(row.status),
     paymentStatus: normalizePaymentStatus(row.payment_status),
@@ -823,7 +941,8 @@ const SORTABLE = new Set(["number", "issue_date", "due_date", "bill_to_name", "t
 
 export async function fetchInvoicePage(
   supabase: SupabaseClient,
-  { search, filter, sort, from, to, today, signal }: {
+  { search, filter, sort, from, to, today, signal, docType = "invoice" }: {
+    docType?: DocType;
     search: string;
     filter: InvoiceListFilter;
     sort: { key: string; direction: "asc" | "desc" } | null;
@@ -833,20 +952,28 @@ export async function fetchInvoicePage(
     signal: AbortSignal;
   },
 ): Promise<AdminPage<InvoiceListRow>> {
-  let query = supabase.from("invoices").select("*", { count: "exact" });
-  const or = orIlike(["number", "bill_to_name", "bill_to_phone", "bill_to_email", "reference", "order_id", "serial_search"], search);
-  if (or) query = query.or(or);
-  if (filter === "draft") query = query.eq("status", "draft");
-  else if (filter === "void") query = query.eq("status", "void");
-  else if (filter === "paid") query = query.eq("status", "issued").eq("balance_due", 0);
-  else if (filter === "open") query = query.eq("status", "issued").gt("balance_due", 0);
-  else if (filter === "due") query = query.eq("status", "issued").gt("balance_due", 0).lte("due_date", today);
-  else if (filter === "overdue") query = query.eq("status", "issued").gt("balance_due", 0).lt("due_date", today);
-  const key = sort && SORTABLE.has(sort.key) ? sort.key : "issue_date";
-  const ascending = sort ? sort.direction === "asc" : false;
-  query = query.order(key, { ascending, nullsFirst: false });
-  if (key !== "created_at") query = query.order("created_at", { ascending: false });
-  const page = unwrapPage<Row>(await query.range(from, to).abortSignal(signal), INVOICES_MIGRATION);
+  const run = (withDocType: boolean) => {
+    let query = supabase.from("invoices").select("*", { count: "exact" });
+    if (withDocType) query = query.eq("doc_type", docType);
+    const or = orIlike(["number", "bill_to_name", "bill_to_phone", "bill_to_email", "reference", "order_id", "serial_search"], search);
+    if (or) query = query.or(or);
+    if (filter === "draft") query = query.eq("status", "draft");
+    else if (filter === "void") query = query.eq("status", "void");
+    else if (filter === "paid") query = query.eq("status", "issued").eq("balance_due", 0);
+    else if (filter === "open") query = query.eq("status", "issued").gt("balance_due", 0);
+    else if (filter === "due") query = query.eq("status", "issued").gt("balance_due", 0).lte("due_date", today);
+    else if (filter === "overdue") query = query.eq("status", "issued").gt("balance_due", 0).lt("due_date", today);
+    else if (filter === "issued") query = query.eq("status", "issued");
+    const key = sort && SORTABLE.has(sort.key) ? sort.key : "issue_date";
+    const ascending = sort ? sort.direction === "asc" : false;
+    query = query.order(key, { ascending, nullsFirst: false });
+    if (key !== "created_at") query = query.order("created_at", { ascending: false });
+    return query.range(from, to).abortSignal(signal);
+  };
+  let response = await run(true);
+  // Before 40 there is no doc_type column: every row is an invoice.
+  if (response.error?.code === "42703" && docType === "invoice") response = await run(false);
+  const page = unwrapPage<Row>(response, docType === "quotation" ? DOCS_MIGRATION : INVOICES_MIGRATION);
   return { ...page, rows: page.rows.map(normalizeInvoiceListRow) };
 }
 
@@ -1099,8 +1226,12 @@ export function duplicateForm(source: InvoiceForm, settings: InvoiceSettings | n
   const gap = source.dueDate && isYmd(source.issueDate) && isYmd(source.dueDate)
     ? Math.round((Date.UTC(...ymdTriple(source.dueDate)) - Date.UTC(...ymdTriple(source.issueDate))) / 86_400_000)
     : null;
+  const quote = source.docType === "quotation";
   return {
     ...fresh,
+    docType: source.docType,
+    validUntil: quote ? addDays(today, settings?.quoteValidDays ?? 14) : null,
+    billToCompany: source.billToCompany,
     customerId: source.customerId,
     billToName: source.billToName,
     billToAddress: source.billToAddress,
@@ -1117,7 +1248,7 @@ export function duplicateForm(source: InvoiceForm, settings: InvoiceSettings | n
     taxType: source.taxType,
     taxValue: source.taxValue,
     deductStock: source.deductStock,
-    saleType: source.saleType ?? fresh.saleType,
+    saleType: quote ? null : (source.saleType ?? fresh.saleType),
     upfrontAmount: source.saleType === "credit" ? source.upfrontAmount : fresh.upfrontAmount,
     upfrontMethod: source.upfrontMethod,
     creditDays: source.creditDays ?? fresh.creditDays,

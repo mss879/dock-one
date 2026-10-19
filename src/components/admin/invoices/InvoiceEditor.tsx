@@ -6,6 +6,7 @@ import {
   Banknote,
   Copy,
   FileCheck2,
+  FileOutput,
   Link2,
   Printer,
   RotateCcw,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useDeferredValue, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useAdminAccess } from "@/components/admin/access";
 import {
   AdminButton,
   AdminNotice,
@@ -34,8 +36,11 @@ import {
 } from "@/components/admin/ui";
 import { addDays, todayYmd } from "@/lib/admin/dates";
 import {
+  buildDocSave,
   buildInvoiceSave,
   buildSaleTerms,
+  DOCS_MIGRATION,
+  docNoun,
   computeTotals,
   CREDIT_DAY_CHOICES,
   creditDueDate,
@@ -57,6 +62,7 @@ import {
   INVOICE_WRITE,
   INVOICES_MIGRATION,
   invoiceDisplayStatus,
+  quotationDisplayStatus,
   SERIALS_MIGRATION,
   invoiceFingerprint,
   PAYMENT_METHODS,
@@ -68,6 +74,8 @@ import {
   type SaleType,
   type AdjustType,
   type ClientHit,
+  type DocType,
+  type ProductHit,
   type InvoiceForm,
   type InvoicePayment,
   type InvoiceRpcResult,
@@ -85,6 +93,7 @@ import { INVOICE_LOGO_PATH, invoiceDocumentTitle, printInvoice, renderInvoiceHtm
 import { InvoicePreview } from "./InvoicePreview";
 import { LineItems } from "./LineItems";
 import { PaymentsPanel } from "./PaymentsPanel";
+import { ProductSearch } from "./ProductSearch";
 import { TemplateSettings } from "./TemplateSettings";
 
 /**
@@ -116,9 +125,18 @@ let saleRpcMissing = false;
  * Save the invoice and how it is paid in one call (admin_save_invoice_sale, 28). Until 28 is
  * applied the invoice still saves through 26's admin_save_invoice — only the payment type waits.
  */
+/** Set once admin_save_document turns out to be missing (40 not applied): 28 / 26 saves from then on. */
+let docRpcMissing = false;
+
 async function saveInvoiceRpc(form: InvoiceForm) {
   const args = buildInvoiceSave(form);
   const sale = buildSaleTerms(form);
+  if (!docRpcMissing) {
+    const result = await adminRpc<InvoiceRpcResult>("admin_save_document", { ...args, p_sale: sale, p_doc: buildDocSave(form) }, { ...INVOICE_WRITE, migration: DOCS_MIGRATION });
+    if (result.ok || result.kind !== "missing_migration") return result;
+    docRpcMissing = true;
+    if (form.docType === "quotation") return result;
+  }
   if (sale && !saleRpcMissing) {
     const result = await adminRpc<InvoiceRpcResult>("admin_save_invoice_sale", { ...args, p_sale: sale }, { ...INVOICE_WRITE, migration: SALE_MIGRATION });
     if (result.ok || result.kind !== "missing_migration") return result;
@@ -132,6 +150,10 @@ function mergeSaved(current: InvoiceForm, saved: InvoiceForm): InvoiceForm {
   return {
     ...current,
     id: saved.id,
+    channel: saved.channel,
+    convertedInvoiceId: saved.convertedInvoiceId,
+    quotationId: saved.quotationId,
+    validUntil: saved.docType === "quotation" && saved.validUntil ? saved.validUntil : current.validUntil,
     number: saved.number,
     status: saved.status,
     paymentStatus: saved.paymentStatus,
@@ -146,7 +168,7 @@ function mergeSaved(current: InvoiceForm, saved: InvoiceForm): InvoiceForm {
   };
 }
 
-function SaveIndicator({ state, dirty, isNew, onRetry, onReload }: { state: SaveState; dirty: boolean; isNew: boolean; onRetry: () => void; onReload: () => void }) {
+function SaveIndicator({ state, dirty, isNew, onRetry, onReload, noun = "invoice" }: { state: SaveState; dirty: boolean; isNew: boolean; onRetry: () => void; onReload: () => void; noun?: string }) {
   const base = "font-mono text-[10.5px] font-semibold tracking-[0.07em] uppercase";
   if (state.kind === "saving") return <span className={`${base} text-adm-mute`}>Saving…</span>;
   if (state.kind === "error")
@@ -166,7 +188,7 @@ function SaveIndicator({ state, dirty, isNew, onRetry, onReload }: { state: Save
         Saved · <DateTime value={state.at} mode="time" />
       </span>
     );
-  return isNew ? <span className={`${base} text-adm-mute`}>New invoice</span> : <span className={`${base} text-adm-mute`}>All changes saved</span>;
+  return isNew ? <span className={`${base} text-adm-mute`}>New {noun}</span> : <span className={`${base} text-adm-mute`}>All changes saved</span>;
 }
 
 function Segmented<T extends string>({ value, options, onChange, label, disabled }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string; disabled?: boolean }) {
@@ -197,8 +219,14 @@ export function InvoiceEditor({
   onBack,
   onNavigate,
   onChanged,
+  newDocType = "invoice",
+  backLabel,
 }: {
   target: Target;
+  /** What "new" creates (Invoices → invoice, Quotations → quotation). */
+  newDocType?: DocType;
+  /** The list the back button returns to. */
+  backLabel?: string;
   /** ?from_order=DO-10042 — a new draft carrying that web order. */
   fromOrder: string | null;
   onBack: () => void;
@@ -230,10 +258,13 @@ export function InvoiceEditor({
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [templateOpen, setTemplateOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [dialog, setDialog] = useState<null | "issue" | "revert" | "void" | "delete">(null);
+  const [dialog, setDialog] = useState<null | "issue" | "revert" | "void" | "delete" | "convert">(null);
   const [voidReason, setVoidReason] = useState("");
   const [duplicating, setDuplicating] = useState(false);
   const [confirm, confirmElement] = useConfirm();
+  const access = useAdminAccess();
+  const [converting, setConverting] = useState(false);
+  const [matches, setMatches] = useState<Record<number, ProductHit>>({});
 
   // Another invoice (or a new one) in the URL: start clean — unless it's the id our own first
   // save just put there. Adjusting state during render, not in an effect.
@@ -274,7 +305,7 @@ export function InvoiceEditor({
   if (!form && wanted && wanted !== source) {
     setSource(wanted);
     if (wanted === "blank") {
-      const fresh = emptyInvoiceForm(settings);
+      const fresh = emptyInvoiceForm(settings, todayYmd(), newDocType);
       setForm(fresh);
       setPayments([]);
       setBaseline(invoiceFingerprint(fresh));
@@ -371,7 +402,7 @@ export function InvoiceEditor({
       if (!result.ok) {
         const conflict = result.message.includes("changed somewhere else");
         setSaveState({ kind: "error", message: result.message, conflict });
-        if (mode === "manual" || conflict) adminToast.error(conflict ? "This invoice changed elsewhere" : "Couldn't save the invoice", result.message);
+        if (mode === "manual" || conflict) adminToast.error(conflict ? `This ${docNoun(current.docType)} changed elsewhere` : `Couldn't save the ${docNoun(current.docType)}`, result.message);
         return false;
       }
       const saved = fromRpcResult(result.data);
@@ -457,7 +488,7 @@ export function InvoiceEditor({
     }
     if (formRef.current && (invoiceFingerprint(formRef.current) !== baselineRef.current || (formRef.current.id == null && hasContent(formRef.current)))) {
       const discard = await confirm({
-        title: form?.id == null ? "Discard this new invoice?" : "Discard unsaved changes?",
+        title: form?.id == null ? `Discard this new ${docNoun(form?.docType ?? "invoice")}?` : "Discard unsaved changes?",
         description: errors && errors.count > 0 ? "Some fields need fixing, so the latest changes couldn't be saved." : "Your latest changes haven't been saved.",
         tone: "danger",
         confirmLabel: "Discard",
@@ -504,6 +535,70 @@ export function InvoiceEditor({
     if (id != null) onNavigate(id);
   };
 
+  // Draft → the other type: invoice terms ↔ quotation terms (when still the template's), no payment
+  // type or stock on a quotation, a validity date.
+  const switchType = (docType: DocType) => {
+    if (!form || docType === form.docType) return;
+    const fromNotes = form.docType === "quotation" ? settings?.quoteNotes : settings?.defaultNotes;
+    const toNotes = docType === "quotation" ? settings?.quoteNotes : settings?.defaultNotes;
+    const notesAreDefault = fromNotes != null && form.notes.join("\n") === fromNotes.join("\n");
+    update({
+      docType,
+      saleType: docType === "quotation" ? null : (form.saleType ?? "cash"),
+      deductStock: docType === "quotation" ? false : (settings?.defaultDeductStock ?? true),
+      validUntil: docType === "quotation" ? (form.validUntil ?? addDays(form.issueDate, settings?.quoteValidDays ?? 14)) : form.validUntil,
+      ...(notesAreDefault && toNotes ? { notes: [...toNotes] } : {}),
+    });
+  };
+
+  const convert = async (lineMatches: Record<string, number> | null): Promise<boolean> => {
+    if (!form || form.id == null) return false;
+    setConverting(true);
+    const result = await adminRpc<InvoiceRpcResult>(
+      "admin_convert_quotation",
+      { p_quote_id: form.id, p_matches: lineMatches },
+      { ...INVOICE_WRITE, migration: DOCS_MIGRATION },
+    );
+    setConverting(false);
+    if (!result.ok) {
+      adminToast.error("Couldn't convert the quotation", result.message);
+      return false;
+    }
+    const invoiceId = fromRpcResult(result.data).form.id;
+    adminToast.success(`${form.number ?? "The quotation"} converted`, "A draft invoice was made from it — check it and issue it.");
+    onChanged();
+    if (invoiceId != null) setAdminParams({ tab: "invoices", invoice: invoiceId }, { reset: true });
+    return true;
+  };
+
+  const startConvert = async () => {
+    if (!form) return;
+    if (dirty && !(await persist("manual"))) return;
+    if (customLines.length > 0) {
+      if (!access.isAdmin) {
+        adminToast.error("An admin must match the custom lines", `${customLines.length} line${customLines.length === 1 ? " isn't" : "s aren't"} in the inventory. Ask an admin to convert this quotation.`);
+        return;
+      }
+      setMatches({});
+      setDialog("convert");
+      return;
+    }
+    await convert(null);
+  };
+
+  // A thank-you email to the client once an invoice is issued (fail-soft; the server sends it once).
+  const sendThankYou = async (invoiceId: number) => {
+    try {
+      const res = await fetch("/api/admin/invoice-thanks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ invoiceId }) });
+      if (res.ok) {
+        const body = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+        if (body?.sent) adminToast.info("Thank-you email sent", "The client got a thank-you note with the website link.");
+      }
+    } catch {
+      // the invoice is issued either way
+    }
+  };
+
   // ── render ────────────────────────────────────────────────────────────────
   const loadError = typeof target === "number" ? load.error : fromOrder ? prefill.error : null;
   const missing =
@@ -514,7 +609,7 @@ export function InvoiceEditor({
     return (
       <div>
         <AdminButton size="sm" variant="ghost" icon={<ArrowLeft aria-hidden className="size-3.5" />} onClick={onBack} className="mb-4">
-          Invoices
+          {backLabel ?? (newDocType === "quotation" ? "Quotations" : "Invoices")}
         </AdminButton>
         {settingsQuery.error && <QueryError error={settingsQuery.error} onRetry={settingsQuery.refetch} feature="Invoices" className="mb-4" />}
         {loadError && <QueryError error={loadError} onRetry={typeof target === "number" ? load.refetch : prefill.refetch} feature="This invoice" className="mb-4" />}
@@ -539,8 +634,11 @@ export function InvoiceEditor({
     );
   }
 
-  const statusMeta = invoiceDisplayStatus({ status: form.status, balanceDue: totals?.balanceDue ?? 0, amountPaid: form.amountPaid, dueDate: form.dueDate }, today);
-  const due = dueHint(form.dueDate, totals?.balanceDue ?? 0, form.status, today);
+  const statusMeta =
+    form.docType === "quotation"
+      ? quotationDisplayStatus(form, today)
+      : invoiceDisplayStatus({ status: form.status, balanceDue: totals?.balanceDue ?? 0, amountPaid: form.amountPaid, dueDate: form.dueDate }, today);
+  const due = form.docType === "quotation" ? "" : dueHint(form.dueDate, totals?.balanceDue ?? 0, form.status, today);
   const draft = form.status === "draft";
   const issued = form.status === "issued";
   const isVoid = form.status === "void";
@@ -549,12 +647,24 @@ export function InvoiceEditor({
   const saleHint = SALE_TYPES.find((t) => t.value === form.saleType)?.hint;
   const creditBalance = totals ? Math.max(totals.total - (form.upfrontAmount ?? 0), 0) : 0;
   const fieldError = (key: keyof NonNullable<typeof errors>["fields"]) => (showErrors ? (errors?.fields[key] ?? null) : null);
-  const nextNumber = settings ? formatInvoiceNumber(settings.numberPrefix, settings.numberDigits, settings.nextNumber) : null;
+  const nextNumber = settings
+    ? form.docType === "quotation"
+      ? formatInvoiceNumber(settings.quotePrefix, settings.numberDigits, settings.quoteNextNumber)
+      : formatInvoiceNumber(settings.numberPrefix, settings.numberDigits, settings.nextNumber)
+    : null;
   const catalogueLines = form.lines.filter((l) => l.variantId != null);
   const trackedUnits = catalogueLines.reduce((sum, l) => sum + (facts.data?.get(l.variantId as number)?.tracked ? (l.quantity ?? 0) : 0), 0);
   const totalsDrift = !dirty && form.id != null && totals != null && Math.abs(totals.total - form.savedTotal) > MONEY_TOLERANCE;
   const priorOthers = (priorInvoices.data ?? []).filter((inv) => inv.id !== form.id && inv.status !== "void");
-  const title = form.number ?? (form.id ? `Draft #${form.id}` : "New invoice");
+  const quote = form.docType === "quotation";
+  const noun = docNoun(form.docType);
+  const title = form.number ?? (form.id ? `Draft #${form.id}` : `New ${noun}`);
+  const back = backLabel ?? (quote ? "Quotations" : "Invoices");
+  const validPayments = payments.filter((p) => p.status === "valid");
+  const canEdit = access.can(quote ? "quotations" : "invoices", "edit");
+  const quoteExpired = quote && form.validUntil != null && form.validUntil < today;
+  const customLines = form.lines.filter((l) => l.variantId == null);
+  const canConvert = quote && form.id != null && !isVoid && form.convertedInvoiceId == null && !quoteExpired && access.can("invoices", "edit");
 
   const onPickClient = (client: ClientHit) =>
     update({
@@ -616,7 +726,7 @@ export function InvoiceEditor({
       <div className="sticky top-14 z-30 -mx-3 mb-5 border-b border-adm-line bg-adm-bg/95 px-3 py-3 backdrop-blur sm:-mx-5 sm:px-5 lg:-mx-8 lg:px-8">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <AdminButton size="sm" variant="ghost" icon={<ArrowLeft aria-hidden className="size-3.5" />} onClick={() => void requestBack()}>
-            Invoices
+            {back}
           </AdminButton>
           <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate font-mono text-[17px] font-semibold tracking-tight text-adm-ink">{title}</h1>
@@ -626,7 +736,7 @@ export function InvoiceEditor({
             {due && <span className="hidden font-mono text-[11px] text-adm-mute sm:inline">{due}</span>}
           </div>
           <div className="min-w-0">
-            <SaveIndicator state={saveState} dirty={dirty} isNew={isNew} onRetry={() => void persist("manual")} onReload={reloadFromServer} />
+            <SaveIndicator state={saveState} dirty={dirty} isNew={isNew} noun={noun} onRetry={() => void persist("manual")} onReload={reloadFromServer} />
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="xl:hidden">
@@ -653,19 +763,19 @@ export function InvoiceEditor({
             <AdminButton size="sm" icon={<Printer aria-hidden className="size-3.5" />} onClick={() => void print()} title="Print or save as PDF (⌘/Ctrl+P)">
               Print / PDF
             </AdminButton>
-            {draft && form.id != null && form.number == null && (
+            {draft && form.id != null && form.number == null && access.isAdmin && (
               <AdminButton size="sm" variant="ghost" icon={<Trash2 aria-hidden className="size-3.5" />} onClick={() => setDialog("delete")}>
                 <span className="hidden 2xl:inline">Delete</span>
                 <span className="sr-only 2xl:hidden">Delete draft</span>
               </AdminButton>
             )}
-            {issued && payments.length === 0 && (
+            {issued && canEdit && form.convertedInvoiceId == null && (validPayments.length === 0 || (access.isAdmin && validPayments.every((p) => p.source === "sale"))) && (
               <AdminButton size="sm" variant="ghost" icon={<RotateCcw aria-hidden className="size-3.5" />} onClick={() => setDialog("revert")} title="Back to draft to change quantities or prices (keeps the number)">
                 <span className="hidden 2xl:inline">Edit as draft</span>
                 <span className="sr-only 2xl:hidden">Edit as draft</span>
               </AdminButton>
             )}
-            {(issued || (draft && form.number != null)) && payments.length === 0 && (
+            {(issued || (draft && form.number != null)) && validPayments.length === 0 && canEdit && (
               <AdminButton size="sm" variant="ghost" icon={<Ban aria-hidden className="size-3.5" />} onClick={() => setDialog("void")}>
                 <span className="hidden 2xl:inline">Void</span>
                 <span className="sr-only 2xl:hidden">Void</span>
@@ -676,9 +786,19 @@ export function InvoiceEditor({
                 Save changes
               </AdminButton>
             )}
-            {issued && (totals?.balanceDue ?? 0) > 0 && (
+            {issued && !quote && (totals?.balanceDue ?? 0) > 0 && (access.can("receipts", "edit") || canEdit) && (
               <AdminButton size="sm" variant={dirty ? "secondary" : "primary"} icon={<Banknote aria-hidden className="size-3.5" />} onClick={() => setPaymentOpen(true)}>
                 Record payment
+              </AdminButton>
+            )}
+            {canConvert && (
+              <AdminButton size="sm" variant="primary" icon={<FileOutput aria-hidden className="size-3.5" />} loading={converting} onClick={() => void startConvert()}>
+                Convert to invoice
+              </AdminButton>
+            )}
+            {quote && form.convertedInvoiceId != null && (
+              <AdminButton size="sm" icon={<FileOutput aria-hidden className="size-3.5" />} onClick={() => setAdminParams({ tab: "invoices", invoice: form.convertedInvoiceId }, { reset: true })}>
+                Open its invoice
               </AdminButton>
             )}
             {draft && (
@@ -687,9 +807,11 @@ export function InvoiceEditor({
                   <span className="hidden sm:inline">Save draft</span>
                   <span className="sr-only sm:hidden">Save draft</span>
                 </AdminButton>
-                <AdminButton size="sm" variant="primary" icon={<FileCheck2 aria-hidden className="size-3.5" />} onClick={() => void startIssue()}>
-                  Issue invoice
-                </AdminButton>
+                {canEdit && (
+                  <AdminButton size="sm" variant="primary" icon={<FileCheck2 aria-hidden className="size-3.5" />} onClick={() => void startIssue()}>
+                    {quote ? "Issue quotation" : "Issue invoice"}
+                  </AdminButton>
+                )}
               </>
             )}
           </div>
@@ -697,7 +819,7 @@ export function InvoiceEditor({
       </div>
 
       {saveState.kind === "error" && saveState.conflict && (
-        <AdminNotice tone="error" title="Someone changed this invoice elsewhere" className="mb-4">
+        <AdminNotice tone="error" title={`Someone changed this ${noun} elsewhere`} className="mb-4">
           Another tab or admin saved it after you opened it, so your latest edits weren&apos;t saved (nothing was overwritten).{" "}
           <button type="button" onClick={reloadFromServer} className="font-semibold underline">
             Reload the latest version
@@ -705,8 +827,28 @@ export function InvoiceEditor({
         </AdminNotice>
       )}
       {isVoid && (
-        <AdminNotice tone="info" title={`${form.number ?? "This invoice"} is void`} className="mb-4">
+        <AdminNotice tone="info" title={`${form.number ?? `This ${noun}`} is void`} className="mb-4">
           {form.voidReason ? `Reason: ${form.voidReason}. ` : ""}It stays on record with its number and can still be printed (marked VOID). Duplicate it to bill again.
+        </AdminNotice>
+      )}
+      {quote && form.requestNote && (
+        <AdminNotice tone="info" title="Requested on the website" className="mb-4">
+          The client wrote: “{form.requestNote}”
+        </AdminNotice>
+      )}
+      {quote && form.convertedInvoiceId != null && (
+        <AdminNotice tone="success" title="Converted into an invoice" className="mb-4">
+          This quotation stays on record; its invoice carries the sale.
+        </AdminNotice>
+      )}
+      {quote && quoteExpired && form.convertedInvoiceId == null && !isVoid && (
+        <AdminNotice tone="info" title="This quotation has expired" className="mb-4">
+          It was valid until {form.validUntil}. {draft ? "Change “Valid until” to quote again." : "Duplicate it to quote again at today's prices."}
+        </AdminNotice>
+      )}
+      {quote && customLines.length > 0 && form.convertedInvoiceId == null && !isVoid && (
+        <AdminNotice tone="info" title={`${customLines.length} line${customLines.length === 1 ? " is" : "s are"} not in the inventory`} className="mb-4">
+          Before this quotation becomes an invoice, an admin matches {customLines.length === 1 ? "it" : "each"} to an inventory product.
         </AdminNotice>
       )}
       {totalsDrift && (
@@ -745,6 +887,9 @@ export function InvoiceEditor({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Client name" required error={fieldError("billToName")} className="sm:col-span-2">
                 <ClientPicker value={form.billToName} disabled={isVoid} invalid={Boolean(fieldError("billToName"))} onChange={(billToName) => update({ billToName })} onPick={onPickClient} />
+              </Field>
+              <Field label="Company" optional error={fieldError("billToCompany")} className="sm:col-span-2">
+                <Input value={form.billToCompany} maxLength={200} disabled={isVoid} onChange={(e) => update({ billToCompany: e.target.value })} />
               </Field>
               <Field label="Address" error={fieldError("billToAddress")} className="sm:col-span-2">
                 <Textarea rows={2} value={form.billToAddress} maxLength={500} disabled={isVoid} onChange={(e) => update({ billToAddress: e.target.value })} />
@@ -789,10 +934,23 @@ export function InvoiceEditor({
 
           {section(
             "invoice-details",
-            "Invoice details",
-            draft ? "The number is given when you issue the invoice, so numbers never skip." : "The number and date are fixed once issued.",
+            quote ? "Quotation details" : "Invoice details",
+            draft ? `The number is given when you issue the ${noun}, so numbers never skip.` : "The number and date are fixed once issued.",
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Invoice no." hint={form.number ? undefined : nextNumber ? `Next free number: ${nextNumber}` : undefined}>
+              {draft && form.number == null && (
+                <Field label="Document" className="sm:col-span-2" hint={quote ? "A quotation may include items not in the inventory, and takes no stock or payments." : "An invoice is a sale: inventory products only."}>
+                  <Segmented<DocType>
+                    label="Document type"
+                    value={form.docType}
+                    options={[
+                      { value: "invoice", label: "Invoice" },
+                      { value: "quotation", label: "Quotation" },
+                    ]}
+                    onChange={(docType) => switchType(docType)}
+                  />
+                </Field>
+              )}
+              <Field label={quote ? "Quotation no." : "Invoice no."} hint={form.number ? undefined : nextNumber ? `Next free number: ${nextNumber}` : undefined}>
                 <Input value={form.number ?? "Given when issued"} readOnly className={form.number ? "font-mono font-semibold" : "text-adm-mute"} />
               </Field>
               <Field label="Reference / PO" optional error={fieldError("reference")}>
@@ -801,10 +959,16 @@ export function InvoiceEditor({
               <Field label="Date" required error={fieldError("issueDate")}>
                 <Input type="date" value={form.issueDate} disabled={locked} onChange={(e) => update({ issueDate: e.target.value })} />
               </Field>
-              <Field label="Due date" optional error={fieldError("dueDate")} hint={credit ? "Set by the credit days under Payment." : undefined}>
-                <Input type="date" value={form.dueDate ?? ""} min={form.issueDate} disabled={isVoid || credit} onChange={(e) => update({ dueDate: e.target.value || null })} />
-              </Field>
-              {!isVoid && !credit && (
+              {quote ? (
+                <Field label="Valid until" error={fieldError("validUntil")} hint={settings ? `New quotations: ${settings.quoteValidDays} days.` : undefined}>
+                  <Input type="date" value={form.validUntil ?? ""} min={form.issueDate} disabled={isVoid || form.convertedInvoiceId != null} onChange={(e) => update({ validUntil: e.target.value || null })} />
+                </Field>
+              ) : (
+                <Field label="Due date" optional error={fieldError("dueDate")} hint={credit ? "Set by the credit days under Payment." : undefined}>
+                  <Input type="date" value={form.dueDate ?? ""} min={form.issueDate} disabled={isVoid || credit} onChange={(e) => update({ dueDate: e.target.value || null })} />
+                </Field>
+              )}
+              {!isVoid && !credit && !quote && (
                 <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
                   <span className="mr-1 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-adm-mute uppercase">Due</span>
                   {dueChoices.map((choice) => {
@@ -838,7 +1002,9 @@ export function InvoiceEditor({
             "invoice-items",
             `Items${form.lines.length ? ` (${form.lines.length})` : ""}`,
             draft
-              ? "Search or scan to add from the catalogue, or add a custom line."
+              ? quote
+                ? "Search or scan to add from the inventory, or add a custom line for anything not in stock."
+                : "Search or scan to add from the inventory — invoices take inventory products only."
               : isVoid
                 ? "A void invoice can't change."
                 : "Quantities and prices are fixed now — descriptions, warranty and serial numbers can still be corrected.",
@@ -854,6 +1020,7 @@ export function InvoiceEditor({
                 units={units}
                 errors={errors?.lines ?? {}}
                 showErrors={showErrors}
+                allowCustom={quote}
               />
               {fieldError("lines") && <p className="mt-2 text-xs font-semibold text-adm-ink">{fieldError("lines")}</p>}
             </>,
@@ -918,7 +1085,7 @@ export function InvoiceEditor({
             </div>,
           )}
 
-          {section(
+          {!quote && section(
             "invoice-payment",
             "Payment",
             draft ? "How the client pays. Issuing records what was paid at the sale." : "How the client paid — fixed once issued (the credit period can still change).",
@@ -1001,7 +1168,7 @@ export function InvoiceEditor({
 
           {section(
             "invoice-terms",
-            "Payment terms & notes",
+            quote ? "Terms & notes" : "Payment terms & notes",
             "Printed at the foot of the invoice.",
             <div className="grid gap-4">
               <Field label="Payment terms" optional error={fieldError("paymentTerms")} hint="e.g. 50% advance, balance on delivery.">
@@ -1024,8 +1191,8 @@ export function InvoiceEditor({
                 hint={
                   <span className="flex flex-wrap items-center gap-x-2">
                     One note per line — numbered automatically.
-                    {settings && !isVoid && form.notes.join("\n") !== settings.defaultNotes.join("\n") && (
-                      <button type="button" className="font-semibold text-adm-accent-ink hover:underline" onClick={() => update({ notes: [...settings.defaultNotes] })}>
+                    {settings && !isVoid && form.notes.join("\n") !== (quote ? settings.quoteNotes : settings.defaultNotes).join("\n") && (
+                      <button type="button" className="font-semibold text-adm-accent-ink hover:underline" onClick={() => update({ notes: [...(quote ? settings.quoteNotes : settings.defaultNotes)] })}>
                         Use the template&apos;s notes
                       </button>
                     )}
@@ -1042,7 +1209,7 @@ export function InvoiceEditor({
             "Stock & internal note",
             undefined,
             <div className="grid gap-4">
-              <Toggle
+              {!quote && <Toggle
                 label="Take items out of stock when issued"
                 description={
                   issued
@@ -1058,15 +1225,17 @@ export function InvoiceEditor({
                 checked={form.deductStock}
                 disabled={locked}
                 onChange={(deductStock) => update({ deductStock })}
-              />
+              />}
               <Field label="Internal note" optional hint="Only admins see this — it's never printed." error={fieldError("internalNote")}>
                 <Textarea rows={2} value={form.internalNote} maxLength={2000} disabled={isVoid} onChange={(e) => update({ internalNote: e.target.value })} />
               </Field>
             </div>,
           )}
 
-          {form.id != null && !draft && (
+          {form.id != null && !draft && !quote && (
             <PaymentsPanel
+              payer={form.billToName}
+              settings={settings}
               invoiceId={form.id}
               number={form.number ?? title}
               status={form.status}
@@ -1114,6 +1283,51 @@ export function InvoiceEditor({
         </aside>
       </div>
 
+      <ConfirmDialog
+        open={dialog === "convert"}
+        onClose={() => setDialog(null)}
+        title={`Convert ${form.number ?? "this quotation"} into an invoice`}
+        description="Every line not in the inventory must be matched to an inventory product (and variant). The quotation stays on record."
+        confirmLabel="Match and convert"
+        onConfirm={async () => {
+          const missing = customLines.filter((l) => l.id == null || !matches[l.id]);
+          if (missing.length) return { ok: false, message: `Pick an inventory product for ${missing.length} line${missing.length === 1 ? "" : "s"}.` };
+          const ok = await convert(Object.fromEntries(customLines.map((l) => [String(l.id), matches[l.id as number].variantId])));
+          return ok ? undefined : false;
+        }}
+      >
+        <ol className="grid gap-3">
+          {customLines.map((line) => (
+            <li key={line.key} className="border border-adm-line p-3">
+              <p className="mb-2 text-[13px] font-semibold text-adm-ink">{line.description || "(no description)"}</p>
+              {line.id != null && matches[line.id] ? (
+                <p className="flex items-center justify-between gap-2 text-[13px]">
+                  <span>
+                    → {matches[line.id].productName.toLowerCase().startsWith(matches[line.id].brand.toLowerCase()) ? matches[line.id].productName : `${matches[line.id].brand} ${matches[line.id].productName}`}
+                    {matches[line.id].variantName && matches[line.id].variantName !== "Standard" ? ` — ${matches[line.id].variantName}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-adm-accent-ink underline"
+                    onClick={() =>
+                      setMatches((m) => {
+                        const next = { ...m };
+                        delete next[line.id as number];
+                        return next;
+                      })
+                    }
+                  >
+                    Change
+                  </button>
+                </p>
+              ) : (
+                <ProductSearch inline onPick={(hit) => line.id != null && setMatches((m) => ({ ...m, [line.id as number]: hit }))} />
+              )}
+            </li>
+          ))}
+        </ol>
+      </ConfirmDialog>
+
       <TemplateSettings
         open={templateOpen}
         onClose={() => setTemplateOpen(false)}
@@ -1127,15 +1341,17 @@ export function InvoiceEditor({
       <ConfirmDialog
         open={dialog === "issue"}
         onClose={() => setDialog(null)}
-        title={form.number ? `Issue ${form.number} again?` : "Issue this invoice?"}
-        confirmLabel="Issue invoice"
+        title={form.number ? `Issue ${form.number} again?` : `Issue this ${noun}?`}
+        confirmLabel={quote ? "Issue quotation" : "Issue invoice"}
         onConfirm={async () => {
           if (form.id == null) return { ok: false, message: "Save the invoice first." };
           const result = await adminRpc<InvoiceRpcResult>("admin_issue_invoice", { p_invoice_id: form.id }, form.deductStock ? INVOICE_STOCK_WRITE : INVOICE_WRITE);
           if (result.ok) {
             applyServer(result.data);
-            const number = fromRpcResult(result.data).form.number ?? "The invoice";
+            const issuedForm = fromRpcResult(result.data).form;
+            const number = issuedForm.number ?? `The ${noun}`;
             adminToast.show({ tone: "success", title: `${number} issued`, description: "Print it or save it as a PDF to send.", action: { label: "Print", onClick: () => void print() } });
+            if (!quote && issuedForm.id != null && issuedForm.billToEmail.trim()) void sendThankYou(issuedForm.id);
           }
           return result;
         }}
@@ -1147,12 +1363,13 @@ export function InvoiceEditor({
           </p>
           <ul className="list-disc pl-4">
             <li>{form.number ? `It keeps its number, ${form.number}.` : `It gets the next number${nextNumber ? ` (${nextNumber})` : ""}.`}</li>
-            <li>
+            {quote && <li>It is valid until {form.validUntil ?? "the template's validity"}. No stock moves and no payment is recorded.</li>}
+            {!quote && <li>
               {form.deductStock && trackedUnits > 0
                 ? `${trackedUnits} tracked unit${trackedUnits === 1 ? "" : "s"} come${trackedUnits === 1 ? "s" : ""} out of stock.`
                 : "Stock doesn't change."}
-            </li>
-            {form.saleType === "credit" ? (
+            </li>}
+            {quote ? null : form.saleType === "credit" ? (
               <li>
                 {(form.upfrontAmount ?? 0) > 0 ? `${formatRs(form.upfrontAmount ?? 0)} paid now is recorded; ` : "Nothing is recorded as paid yet; "}
                 the balance of {formatRs(creditBalance)} is due {form.dueDate ?? "—"}.
@@ -1168,15 +1385,15 @@ export function InvoiceEditor({
       <ConfirmDialog
         open={dialog === "revert"}
         onClose={() => setDialog(null)}
-        title={`Move ${form.number ?? "this invoice"} back to draft?`}
-        description={`It keeps its number. ${form.stockDeducted ? "The stock it took goes back until you issue it again. " : ""}${payments.some((p) => p.source === "sale") ? "The payment recorded at the sale is removed and recorded again when you re-issue. " : ""}Use this to change quantities, prices, the discount, VAT / tax or how it is paid.`}
+        title={`Move ${form.number ?? `this ${noun}`} back to draft?`}
+        description={`It keeps its number. ${form.stockDeducted ? "The stock it took goes back until you issue it again. " : ""}${validPayments.some((p) => p.source === "sale") ? "The receipt taken at the sale is voided (kept on record) and a new one is made when you re-issue. " : ""}Use this to change quantities, prices, the discount, VAT / tax or how it is paid.`}
         confirmLabel="Back to draft"
         onConfirm={async () => {
           if (form.id == null) return { ok: false, message: "Nothing to change." };
           const result = await adminRpc<InvoiceRpcResult>("admin_revert_invoice", { p_invoice_id: form.id }, form.stockDeducted ? INVOICE_STOCK_WRITE : INVOICE_WRITE);
           if (result.ok) {
             applyServer(result.data);
-            adminToast.success(`${form.number ?? "The invoice"} is a draft again`, "Make your changes, then issue it again.");
+            adminToast.success(`${form.number ?? `The ${noun}`} is a draft again`, "Make your changes, then issue it again.");
           }
           return result;
         }}
@@ -1189,11 +1406,12 @@ export function InvoiceEditor({
           setVoidReason("");
         }}
         tone="danger"
-        title={`Void ${form.number ?? "this invoice"}?`}
-        description={`It stays on record with its number, marked VOID, and can't be changed or paid any more.${form.stockDeducted ? " The stock it took goes back." : ""}`}
-        confirmLabel="Void invoice"
+        title={`Void ${form.number ?? `this ${noun}`}?`}
+        description={`It stays on record with its number and the reason, marked VOID, and can't be changed${quote ? "" : " or paid"} any more.${form.stockDeducted ? " The stock it took goes back." : ""}`}
+        confirmLabel={quote ? "Void quotation" : "Void invoice"}
         onConfirm={async () => {
           if (form.id == null) return { ok: false, message: "Nothing to void." };
+          if (!voidReason.trim()) return { ok: false, message: "Give the reason — it stays on record (sales report)." };
           const result = await adminRpc<InvoiceRpcResult>(
             "admin_void_invoice",
             { p_invoice_id: form.id, p_reason: voidReason.trim() || null },
@@ -1202,12 +1420,12 @@ export function InvoiceEditor({
           if (result.ok) {
             applyServer(result.data);
             setVoidReason("");
-            adminToast.success(`${form.number ?? "The invoice"} is void`);
+            adminToast.success(`${form.number ?? `The ${noun}`} is void`);
           }
           return result;
         }}
       >
-        <Field label="Reason" optional hint="Kept with the invoice (not printed).">
+        <Field label="Reason" required hint="Kept with the document and shown in the sales report (not printed).">
           <Input value={voidReason} maxLength={500} onChange={(e) => setVoidReason(e.target.value)} />
         </Field>
       </ConfirmDialog>

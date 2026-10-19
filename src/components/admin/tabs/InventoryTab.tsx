@@ -2,6 +2,7 @@
 
 import { ArrowLeftRight, Download } from "lucide-react";
 import { useState } from "react";
+import { useAdminAccess } from "@/components/admin/access";
 import { InlineNumber } from "@/components/admin/catalogue/InlineNumber";
 import { Thumb, categoryLabel, useCatalogueLookups } from "@/components/admin/catalogue/shared";
 import { getAdminTab } from "@/components/admin/registry";
@@ -57,6 +58,8 @@ function describe(row: AdminInventoryRow): string {
 
 export default function InventoryTab() {
   const tab = getAdminTab("inventory");
+  const access = useAdminAccess();
+  const canEdit = access.can("inventory", "edit");
   const lookups = useCatalogueLookups();
   const [filters, setFilters] = useState<InventoryFilters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
@@ -145,9 +148,11 @@ export default function InventoryTab() {
         description={tab.summary}
         actions={
           <>
-            <AdminButton icon={<ArrowLeftRight aria-hidden className="size-3.5" />} onClick={() => setRecording({ variantId: null })}>
-              Record movement
-            </AdminButton>
+            {canEdit && (
+              <AdminButton icon={<ArrowLeftRight aria-hidden className="size-3.5" />} onClick={() => setRecording({ variantId: null })}>
+                Record movement
+              </AdminButton>
+            )}
             <AdminButton icon={<Download aria-hidden className="size-3.5" />} loading={exporting} onClick={() => void exportCsv()}>
               Export CSV
             </AdminButton>
@@ -244,7 +249,7 @@ export default function InventoryTab() {
               cell: (row) => (
                 <Toggle
                   checked={row.tracked}
-                  disabled={busyVariant === row.variantId}
+                  disabled={!canEdit || busyVariant === row.variantId}
                   label={<span className="sr-only">{`Track stock for ${describe(row)}`}</span>}
                   onChange={(on) => (on ? void startTracking(row) : setUntracking(row))}
                 />
@@ -256,7 +261,11 @@ export default function InventoryTab() {
               align: "right",
               cell: (row) =>
                 row.tracked ? (
-                  <InlineNumber value={row.stockLevel} max={1_000_000} label={`Stock for ${describe(row)}`} onCommit={(value) => saveLevel(row, "stock_level", value)} />
+                  canEdit ? (
+                    <InlineNumber value={row.stockLevel} max={1_000_000} label={`Stock for ${describe(row)}`} onCommit={(value) => saveLevel(row, "stock_level", value)} />
+                  ) : (
+                    <span className="font-mono tabular-nums">{row.stockLevel ?? 0}</span>
+                  )
                 ) : (
                   <span className="text-adm-mute">Not tracked</span>
                 ),
@@ -266,7 +275,9 @@ export default function InventoryTab() {
               header: "Alert at",
               align: "right",
               cell: (row) =>
-                row.tracked ? (
+                row.tracked && !canEdit ? (
+                  <span className="font-mono tabular-nums">{row.lowStockThreshold ?? 0}</span>
+                ) : row.tracked ? (
                   <InlineNumber
                     value={row.lowStockThreshold}
                     max={100_000}

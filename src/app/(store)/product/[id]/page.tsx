@@ -5,6 +5,7 @@ import { ProductFacts } from "@/components/catalogue/ProductFacts";
 import { ProductGallery } from "@/components/catalogue/ProductGallery";
 import { ProductGrid } from "@/components/catalogue/ProductGrid";
 import { ProductPurchase } from "@/components/catalogue/ProductPurchase";
+import { ProductViewers } from "@/components/catalogue/ProductViewers";
 import { hasSpecContent, ProductSpecs } from "@/components/catalogue/ProductSpecs";
 import { TrackEvent } from "@/components/catalogue/TrackEvent";
 import { Rating } from "@/components/product/Rating";
@@ -129,6 +130,7 @@ export default async function ProductPage({ params }: Params) {
 
           <div className="mt-6">
             <ProductPurchase product={product} />
+            <ProductViewers productId={product.id} />
           </div>
           <ProductFacts settings={settings} warrantyMonths={product.warrantyMonths} />
         </div>

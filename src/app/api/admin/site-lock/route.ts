@@ -7,7 +7,7 @@ import {
   normalizeAdminSiteLockState,
   type AdminSiteLockState,
 } from "@/components/admin/site-lock/types";
-import { getAdminIdentity } from "@/lib/auth";
+import { getAdminIdentity, identityCan } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/env";
 import { json, MESSAGES } from "@/lib/http";
 import { cleanText, isPlainObject, isSameOrigin, readJsonBody } from "@/lib/request-guard";
@@ -68,7 +68,7 @@ async function guard(request: NextRequest): Promise<{ supabase: SupabaseClient }
   if (!isSameOrigin(request)) return { response: json({ error: MESSAGES.forbidden }, 403) };
   if (!isSupabaseConfigured) return { response: json({ error: MESSAGES.notConfigured }, 503) };
   const admin = await getAdminIdentity();
-  if (!admin) return { response: json({ error: MESSAGES.forbidden }, 403) };
+  if (!admin || !identityCan(admin, "site-lock", "view")) return { response: json({ error: MESSAGES.forbidden }, 403) };
   try {
     return { supabase: await createSessionSupabase() };
   } catch {

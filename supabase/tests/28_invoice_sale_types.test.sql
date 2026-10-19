@@ -8,12 +8,16 @@ SELECT set_config('t.owner', pg_temp.new_user('owner@shop.test')::text, false);
 SELECT pg_temp.make_admin(current_setting('t.owner')::uuid);
 SELECT set_config('t.shopper', pg_temp.new_user('nimal@shop.test')::text, false);
 SELECT set_config('t.today', ((now() AT TIME ZONE 'Asia/Colombo')::date)::text, false);
+-- an untracked service item (40: every invoice line is an inventory product)
+INSERT INTO public.products (slug, brand, name) VALUES ('st28-service', 'SvcBrand', 'Laptop setup service');
+INSERT INTO public.product_variants (product_id, sku, name, price) SELECT id, 'ST28-SVC', 'Standard', 50000 FROM public.products WHERE slug = 'st28-service';
+SELECT set_config('t.svc', (SELECT id::text FROM public.product_variants WHERE sku = 'ST28-SVC'), false);
 
 -- One free-text line of Rs. 50,000 (no stock involved); returns the new invoice id.
 CREATE FUNCTION pg_temp.sale(p_name text, p_sale jsonb, p_issue_date date DEFAULT NULL) RETURNS int LANGUAGE sql AS $$
   SELECT (public.admin_save_invoice_sale(
             jsonb_strip_nulls(jsonb_build_object('bill_to_name', p_name, 'issue_date', p_issue_date)),
-            jsonb_build_array(jsonb_build_object('description', 'Laptop setup and accessories', 'quantity', 1, 'unit_price', 50000)),
+            jsonb_build_array(jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Laptop setup and accessories', 'quantity', 1, 'unit_price', 50000)),
             p_sale) #>> '{invoice,id}')::int
 $$;
 CREATE FUNCTION pg_temp.inv(p_id int) RETURNS public.invoices LANGUAGE sql AS $$
@@ -21,7 +25,7 @@ CREATE FUNCTION pg_temp.inv(p_id int) RETURNS public.invoices LANGUAGE sql AS $$
 $$;
 CREATE FUNCTION pg_temp.pays(p_id int) RETURNS text LANGUAGE sql AS $$
   SELECT COALESCE(string_agg(format('%s:%s:%s', amount, method, source), ',' ORDER BY id), '-')
-    FROM public.invoice_payments WHERE invoice_id = p_id
+    FROM public.invoice_payments WHERE invoice_id = p_id AND status = 'valid'   -- 40: voided receipts are kept
 $$;
 
 -- ── privileges ──────────────────────────────────────────────────────────────
@@ -102,7 +106,7 @@ SELECT pg_temp.eq((SELECT due_date - issue_date FROM pg_temp.inv(current_setting
 -- ── back to draft ───────────────────────────────────────────────────────────
 SELECT public.admin_revert_invoice(current_setting('t.cash')::int);
 SELECT pg_temp.eq((SELECT format('%s|%s|%s', status, balance_due, pg_temp.pays(id)) FROM pg_temp.inv(current_setting('t.cash')::int)),
-                  'draft|50000.00|-', 'back to draft removes the payment recorded at the sale');
+                  'draft|50000.00|-', 'back to draft voids the receipt taken at the sale');
 SELECT public.admin_issue_invoice(current_setting('t.cash')::int);
 SELECT pg_temp.eq((SELECT format('%s|%s|%s', status, payment_status, pg_temp.pays(id)) FROM pg_temp.inv(current_setting('t.cash')::int)),
                   'issued|paid|50000.00:cash:sale', 'issuing again records it again (once)');
@@ -110,11 +114,11 @@ SELECT public.admin_record_invoice_payment(current_setting('t.cr')::int, 5000, c
 SELECT pg_temp.eq(pg_temp.pays(current_setting('t.cr')::int), '10000.00:bank_transfer:sale,5000.00:cash:manual',
                   'a later payment is a manual one');
 SELECT pg_temp.throws(format('SELECT public.admin_revert_invoice(%s)', current_setting('t.cr')), '22023',
-                      'a payment recorded after the sale blocks back to draft', 'invoice_has_payments:% has 1 payment recorded. Delete it first%');
+                      'a payment recorded after the sale blocks back to draft', 'invoice_has_payments:% has 1 receipt recorded after the sale%');
 
 -- ── no sale type: exactly as before 28 ──────────────────────────────────────
 SELECT set_config('t.old', (public.admin_save_invoice('{"bill_to_name":"Legacy"}',
-  '[{"description":"Old-style line","quantity":1,"unit_price":1000}]') #>> '{invoice,id}'), false);
+  jsonb_build_array(jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Old-style line', 'quantity', 1, 'unit_price', 1000))) #>> '{invoice,id}'), false);
 SELECT public.admin_issue_invoice(current_setting('t.old')::int);
 SELECT pg_temp.eq((SELECT format('%s|%s|%s', COALESCE(sale_type, '∅'), payment_status, pg_temp.pays(id)) FROM pg_temp.inv(current_setting('t.old')::int)),
                   '∅|unpaid|-', 'an invoice without a sale type records nothing when issued');

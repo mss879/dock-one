@@ -24,7 +24,8 @@ export function stockLabel(hit: Pick<ProductHit, "tracked" | "stockLevel">): { t
   return { text: `${n} in stock`, tone: "success" };
 }
 
-export function ProductSearch({ onPick, disabled = false }: { onPick: (hit: ProductHit) => void; disabled?: boolean }) {
+/** `inline`: results open in the page flow instead of floating — for use inside a scrolling dialog. */
+export function ProductSearch({ onPick, disabled = false, inline = false }: { onPick: (hit: ProductHit) => void; disabled?: boolean; inline?: boolean }) {
   const listId = `${useId().replace(/[^a-zA-Z0-9_-]/g, "")}-products`;
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -147,7 +148,7 @@ export function ProductSearch({ onPick, disabled = false }: { onPick: (hit: Prod
           id={listId}
           role="listbox"
           aria-label="Matching products"
-          className="absolute inset-x-0 top-full z-30 mt-1 max-h-[22rem] overflow-y-auto border border-adm-ink bg-adm-panel shadow-[0_12px_32px_rgba(11,11,12,0.16)]"
+          className={`${inline ? "relative max-h-[16rem]" : "absolute inset-x-0 top-full z-30 max-h-[22rem] shadow-[0_12px_32px_rgba(11,11,12,0.16)]"} mt-1 overflow-y-auto border border-adm-ink bg-adm-panel`}
         >
           {hits.map((hit, index) => {
             const stock = stockLabel(hit);

@@ -57,7 +57,10 @@ INSERT INTO allow_anon (fn, migration) VALUES
   ('public.log_assistant_turn(uuid,text,text,text,integer[],integer[],integer[],text,text[],text[],text,text,integer,integer,integer,boolean,text,text,integer)', '19_assistant_core'),
   ('public.list_live_offers(uuid)',                      '20_assistant_offers'),
   ('public.lookup_order_for_assistant(text,text,uuid,text)', '21_assistant_memory_lookup'),
-  ('public.run_retention(text)',                         '22_retention (secret)');
+  ('public.run_retention(text)',                         '22_retention (secret)'),
+  ('public.request_quotation(jsonb,jsonb)',              '40_sales_documents (route)'),
+  ('public.get_public_quotation(integer,uuid)',          '40_sales_documents (token)'),
+  ('public.ping_product_view(integer,uuid)',             '42_storefront_extras (route)');
 
 CREATE TEMP TABLE allow_authenticated (fn text PRIMARY KEY, migration text NOT NULL); -- grant U (NOT anon)
 INSERT INTO allow_authenticated (fn, migration) VALUES
@@ -109,7 +112,27 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.admin_inventory_value_report(text,text,text,integer)',      '38_stock_movements'),
   ('public.admin_stock_movement_report(date,date,text,text,text,integer)', '38_stock_movements'),
   ('public.admin_stock_movement_history(integer,date,date)',           '38_stock_movements'),
-  ('public.admin_stock_report_options()',                              '38_stock_movements');
+  ('public.admin_stock_report_options()',                              '38_stock_movements'),
+  ('public.is_full_admin()',                                           '39_staff_accounts'),
+  ('public.staff_can(text,text)',                                      '39_staff_accounts'),
+  ('public.my_admin_access()',                                         '39_staff_accounts'),
+  ('public.admin_list_staff()',                                        '39_staff_accounts'),
+  ('public.admin_create_staff(text,text,text,jsonb)',                  '39_staff_accounts'),
+  ('public.admin_update_staff(uuid,text,jsonb,boolean)',               '39_staff_accounts'),
+  ('public.admin_set_staff_password(uuid,text)',                       '39_staff_accounts'),
+  ('public.admin_save_document(jsonb,jsonb,jsonb,jsonb)',              '40_sales_documents'),
+  ('public.admin_convert_quotation(integer,jsonb)',                    '40_sales_documents'),
+  ('public.admin_record_receipt(jsonb)',                               '40_sales_documents'),
+  ('public.admin_allocate_receipt(integer,integer)',                   '40_sales_documents'),
+  ('public.admin_void_receipt(integer,text)',                          '40_sales_documents'),
+  ('public.admin_receipts_summary(date,date)',                         '40_sales_documents'),
+  ('public.admin_mark_thank_you_sent(integer)',                        '40_sales_documents'),
+  ('public.admin_sales_report(date,date,text)',                        '40_sales_documents'),
+  ('public.admin_warranty_search(text,text,integer,integer)',          '41_suppliers_warranty'),
+  ('public.admin_save_warranty(integer[],jsonb)',                      '41_suppliers_warranty'),
+  ('public.admin_record_stock_receipt(integer,integer,integer,date,text,text,timestamp with time zone,integer[],jsonb)', '41_suppliers_warranty'),
+  ('public.admin_supplier_deliveries(integer)',                        '41_suppliers_warranty'),
+  ('public.admin_variant_units(integer)',                              '41_suppliers_warranty');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);
@@ -143,7 +166,12 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.expenses',                ARRAY['anon'],                  '29_expenses'),
   ('public.product_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
   ('public.variant_sourcing',        ARRAY['anon'],                  '34_seed_inventory'),
-  ('public.stock_movements',         ARRAY['anon'],                  '38_stock_movements');
+  ('public.stock_movements',         ARRAY['anon'],                  '38_stock_movements'),
+  ('public.staff_accounts',          ARRAY['anon'],                  '39_staff_accounts'),
+  ('public.staff_api_map',           ARRAY['anon', 'authenticated'], '39_staff_accounts'),
+  ('public.suppliers',               ARRAY['anon'],                  '41_suppliers_warranty'),
+  ('public.unit_warranties',         ARRAY['anon', 'authenticated'], '41_suppliers_warranty'),
+  ('public.product_presence',        ARRAY['anon', 'authenticated'], '42_storefront_extras');
 
 -- ── the lists themselves are valid ──────────────────────────────────────────
 SELECT pg_temp.eq((SELECT string_agg(fn || ' (' || migration || ')', ', ' ORDER BY fn)

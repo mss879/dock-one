@@ -162,12 +162,14 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
   const totals = computeTotals(form);
   const lines = form.lines.filter((line) => line.description.trim() !== "" || line.unitPrice != null);
   const notes = form.notes.map((note) => note.trim()).filter(Boolean);
-  const paid = form.status === "issued" && totals.total > 0 && totals.balanceDue <= 0;
-  const showPaidRows = form.status === "issued" && form.amountPaid > 0;
+  const quote = form.docType === "quotation";
+  const paid = !quote && form.status === "issued" && totals.total > 0 && totals.balanceDue <= 0;
+  const showPaidRows = !quote && form.status === "issued" && form.amountPaid > 0;
   const terms = form.paymentTerms.trim();
   // How the sale is paid (28): printed above the free-text terms.
-  const saleLine =
-    form.saleType === "cash"
+  const saleLine = quote
+    ? ""
+    : form.saleType === "cash"
       ? "Cash sale — paid in full."
       : form.saleType === "card"
         ? "Card payment — paid in full."
@@ -213,7 +215,7 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
     <div class="inv-topbar" aria-hidden="true"><span class="g"></span><span class="n"></span></div>
     <header class="inv-head">
       <img class="inv-logo" src="${logoUrl}" alt="Dock One Solutions">
-      <h1 class="inv-title">INVOICE</h1>
+      <h1 class="inv-title">${quote ? "QUOTATION" : "INVOICE"}</h1>
       <div class="inv-address">${settings.addressLines.map((line) => html`<p>${line}</p>`)}</div>
       <div class="inv-contacts">${[settings.phone, settings.email, settings.website].filter(Boolean).map((line) => html`<p>${line}</p>`)}</div>
     </header>
@@ -223,15 +225,16 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
         <h2>BILL TO</h2>
         <dl class="inv-kv">
           ${kv("Client Name", form.billToName.trim())}
+          ${form.billToCompany.trim() ? kv("Company", form.billToCompany.trim()) : ""}
           ${kv("Address", form.billToAddress.trim())}
           ${kv("City / Postal Code", cityLine(form))}
           ${kv("Contact / Email", contactLine(form))}
         </dl>
       </div>
       <dl class="inv-kv inv-meta">
-        ${kv("Invoice No", number, "no")}
+        ${kv(quote ? "Quotation No" : "Invoice No", number, "no")}
         ${kv("Date", formatInvoiceDate(form.issueDate))}
-        ${kv("Due Date", formatInvoiceDate(form.dueDate))}
+        ${quote ? kv("Valid Until", formatInvoiceDate(form.validUntil)) : kv("Due Date", formatInvoiceDate(form.dueDate))}
         ${form.reference.trim() ? kv("Reference", form.reference.trim()) : ""}
       </dl>
     </section>
@@ -244,7 +247,7 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
     <section class="inv-summary">
       ${paid ? html`<div class="inv-stamp" aria-hidden="true">PAID${paidOn ? html`<small>${formatInvoiceDate(paidOn)}</small>` : ""}</div>` : ""}
       <div class="inv-terms">
-        <h3>Payment Terms:</h3>
+        <h3>${quote ? "Terms:" : "Payment Terms:"}</h3>
         ${saleLine ? html`<p class="text">${saleLine}</p>` : ""}
         ${terms ? html`<p class="text">${terms}</p>` : ""}
         ${bankBlock}
@@ -276,7 +279,7 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
 /** "INV-0001 — Acme Holdings" — also the default file name of "Save as PDF". */
 export function invoiceDocumentTitle(form: InvoiceForm): string {
   const who = form.billToName.trim();
-  const what = form.number ?? "Draft invoice";
+  const what = form.number ?? (form.docType === "quotation" ? "Draft quotation" : "Draft invoice");
   return who ? `${what} — ${who}` : what;
 }
 

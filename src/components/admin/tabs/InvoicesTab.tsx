@@ -2,6 +2,7 @@
 
 import { FilePlus2, Settings2 } from "lucide-react";
 import { useState } from "react";
+import { useAdminAccess } from "@/components/admin/access";
 import { InvoiceEditor } from "@/components/admin/invoices/InvoiceEditor";
 import { printInvoice, INVOICE_LOGO_PATH } from "@/components/admin/invoices/invoice-document";
 import { TemplateSettings } from "@/components/admin/invoices/TemplateSettings";
@@ -22,7 +23,10 @@ import {
 } from "@/components/admin/ui";
 import { todayYmd } from "@/lib/admin/dates";
 import {
+  buildDocSave,
   buildInvoiceSave,
+  buildSaleTerms,
+  DOCS_MIGRATION,
   dueHint,
   duplicateForm,
   FALLBACK_INVOICE_SETTINGS,
@@ -60,6 +64,8 @@ import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function InvoicesTab() {
   const tab = getAdminTab("invoices");
+  const access = useAdminAccess();
+  const canEdit = access.can("invoices", "edit");
   const param = useAdminParam("invoice");
   const fromOrderParam = useAdminParam("from_order");
   const target: number | "new" | null = param === "new" ? "new" : param && /^\d{1,9}$/.test(param) ? Number(param) : null;
@@ -85,7 +91,7 @@ export default function InvoicesTab() {
   const today = todayYmd();
 
   const { from, to } = pageRange(page);
-  const list = useAdminQuery(({ supabase, signal }) => fetchInvoicePage(supabase, { search, filter, sort, from, to, today, signal }), ["admin-invoices", search, filter, sort, from, to, today], {
+  const list = useAdminQuery(({ supabase, signal }) => fetchInvoicePage(supabase, { search, filter, sort, from, to, today, signal, docType: "invoice" }), ["admin-invoices", search, filter, sort, from, to, today], {
     enabled: target === null,
     migration: INVOICES_MIGRATION,
   });
@@ -146,7 +152,12 @@ export default function InvoicesTab() {
         adminToast.error("This invoice no longer exists");
         return;
       }
-      const result = await adminRpc<InvoiceRpcResult>("admin_save_invoice", buildInvoiceSave(duplicateForm(loaded.form, settings, today)), INVOICE_WRITE);
+      const copy = duplicateForm(loaded.form, settings, today);
+      const result = await adminRpc<InvoiceRpcResult>(
+        "admin_save_document",
+        { ...buildInvoiceSave(copy), p_sale: buildSaleTerms(copy), p_doc: buildDocSave(copy) },
+        { ...INVOICE_WRITE, migration: DOCS_MIGRATION },
+      );
       if (!result.ok) {
         adminToast.error("Couldn't duplicate the invoice", result.message);
         return;
@@ -186,6 +197,7 @@ export default function InvoicesTab() {
         }}
         onNavigate={(id, options) => setAdminParams({ invoice: id, from_order: null }, { replace: options?.replace })}
         onChanged={refresh}
+        newDocType="invoice"
       />
     );
   }
@@ -201,12 +213,16 @@ export default function InvoicesTab() {
         description={tab.summary}
         actions={
           <>
-            <AdminButton icon={<Settings2 aria-hidden className="size-3.5" />} onClick={() => setTemplateOpen(true)}>
-              Template &amp; numbering
-            </AdminButton>
-            <AdminButton variant="primary" icon={<FilePlus2 aria-hidden className="size-3.5" />} onClick={() => open("new")}>
-              New invoice
-            </AdminButton>
+            {access.isAdmin && (
+              <AdminButton icon={<Settings2 aria-hidden className="size-3.5" />} onClick={() => setTemplateOpen(true)}>
+                Template &amp; numbering
+              </AdminButton>
+            )}
+            {canEdit && (
+              <AdminButton variant="primary" icon={<FilePlus2 aria-hidden className="size-3.5" />} onClick={() => open("new")}>
+                New invoice
+              </AdminButton>
+            )}
           </>
         }
       />
@@ -309,6 +325,7 @@ export default function InvoicesTab() {
                 <span className="flex flex-col">
                   <span className={`font-mono font-semibold ${row.number ? "text-adm-ink" : "text-adm-mute"}`}>{row.number ?? `Draft #${row.id}`}</span>
                   {row.orderId && <span className="font-mono text-[11px] text-adm-mute">{row.orderId}</span>}
+                  {row.channel === "website" && <span className="font-mono text-[10px] tracking-[0.06em] text-adm-accent-ink uppercase">Website sale</span>}
                 </span>
               ),
             },
@@ -366,8 +383,8 @@ export default function InvoicesTab() {
           actions={[
             { label: "Open", onClick: (row) => open(row.id) },
             { label: "Print / PDF", disabled: (row) => busyId === row.id, onClick: (row) => void printRow(row) },
-            { label: "Duplicate", disabled: (row) => busyId === row.id, onClick: (row) => void duplicateRow(row) },
-            { label: "Delete draft", variant: "danger", hidden: (row) => row.number != null, onClick: setDeleting },
+            { label: "Duplicate", hidden: () => !canEdit, disabled: (row) => busyId === row.id, onClick: (row) => void duplicateRow(row) },
+            { label: "Delete draft", variant: "danger", hidden: (row) => row.number != null || !access.isAdmin, onClick: setDeleting },
           ]}
           empty={{
             title: filtered ? "No invoices match" : "No invoices yet",

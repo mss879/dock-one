@@ -7,8 +7,8 @@ import { AdminButton, AdminNotice, Field, Input } from "@/components/admin/ui";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 /**
- * Admin sign-in form (blueprint §11.1). After signInWithPassword it reads the viewer's OWN
- * customers row (RLS: select own) and signs a non-admin straight back out. That check is UX only
+ * Admin sign-in form (blueprint §11.1). After signInWithPassword it asks my_admin_access (owner or
+ * staff, 39_staff_accounts) and signs anyone else straight back out. That check is UX only
  * — the real gate is requireAdmin() in the admin layout and page, then RLS and the admin RPCs.
  */
 
@@ -20,7 +20,7 @@ type Props = {
   configured: boolean;
 };
 
-const NOT_ADMIN_MESSAGE = "This account doesn't have admin access, so it has been signed out again. Use the store owner's account.";
+const NOT_ADMIN_MESSAGE = "This account doesn't have admin access, so it has been signed out again. Use the store owner's account or a staff account.";
 const VERIFY_FAILED_MESSAGE =
   "Signed in, but admin access couldn't be verified (the customers table may be missing — apply 02_customers_and_auth.sql). You've been signed out.";
 
@@ -71,9 +71,23 @@ export function SignInClient({ target, signedInAs, configured }: Props) {
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase.from("customers").select("is_admin").eq("id", data.user.id).maybeSingle();
-      if (profileError || profile?.is_admin !== true) {
-        if (profileError) console.error("[admin] is_admin check failed", profileError);
+      // The owner or an active staff account (39_staff_accounts · my_admin_access); before 39 is
+      // applied, the owner's customers.is_admin flag.
+      let allowed = false;
+      let profileError: unknown = null;
+      const { data: access, error: accessError } = await supabase.rpc("my_admin_access");
+      if (!accessError) {
+        const role = access && typeof access === "object" ? (access as Record<string, unknown>).role : null;
+        allowed = role === "admin" || role === "staff";
+      } else if (accessError.code === "PGRST202" || accessError.code === "42883") {
+        const { data: profile, error } = await supabase.from("customers").select("is_admin").eq("id", data.user.id).maybeSingle();
+        profileError = error;
+        allowed = !error && profile?.is_admin === true;
+      } else {
+        profileError = accessError;
+      }
+      if (profileError || !allowed) {
+        if (profileError) console.error("[admin] admin access check failed", profileError);
         try {
           await supabase.auth.signOut({ scope: "local" });
         } catch {

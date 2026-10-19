@@ -25,6 +25,9 @@ SELECT p.id, v.sku, v.name, v.price, v.pos
 SELECT set_config('t.v8', (SELECT id::text FROM public.product_variants WHERE sku = 'INV-LT-8'), false);
 SELECT set_config('t.v16', (SELECT id::text FROM public.product_variants WHERE sku = 'INV-LT-16'), false);
 SELECT set_config('t.vms', (SELECT id::text FROM public.product_variants WHERE sku = 'INV-MS-1'), false);
+INSERT INTO public.products (slug, brand, name, category_id) VALUES ('inv-service', 'InvBrand', 'Inv Setup Service', 'inv-cat');
+INSERT INTO public.product_variants (product_id, sku, name, price) SELECT id, 'INV-SVC', 'Standard', 2500 FROM public.products WHERE slug = 'inv-service';
+SELECT set_config('t.svc', (SELECT id::text FROM public.product_variants WHERE sku = 'INV-SVC'), false);   -- untracked service item (40: invoice lines come from the inventory)
 INSERT INTO public.inventory (variant_id, stock_level) VALUES
   (current_setting('t.v8')::int, 5),      -- tracked: 5 on hand
   (current_setting('t.vms')::int, 10);    -- tracked: 10 on hand (16GB stays untracked)
@@ -169,7 +172,7 @@ SELECT public.admin_save_invoice(
     jsonb_build_object('variant_id', current_setting('t.v8')::int, 'description', 'Inv Laptop 15 — 8GB / 256GB',
                        'warranty', '1 Year', 'quantity', 2, 'unit_price', 150000),
     jsonb_build_object('variant_id', current_setting('t.v16')::int, 'description', 'Inv Laptop 15 — 16GB / 512GB', 'quantity', 1, 'unit_price', 180000),
-    jsonb_build_object('description', 'Setup & data transfer', 'quantity', 1.5, 'unit_price', 2500.5)));
+    jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Setup & data transfer', 'quantity', 1.5, 'unit_price', 2500.5)));
 SELECT set_config('t.i1', public.admin_issue_invoice(current_setting('t.id1')::int)::text, false);
 SELECT pg_temp.eq((SELECT format('%s|%s|%s|%s|%s', number, status, issued_at IS NOT NULL, stock_deducted, total) FROM pg_temp.inv('t.id1')),
                   'INV-0001|issued|t|t|483750.75', 'issuing gives the first number and takes the stock');
@@ -250,24 +253,25 @@ SELECT pg_temp.throws(format($$SELECT public.admin_record_invoice_payment(%s, 40
                       '22023', 'more than the balance is refused',
                       'overpayment:The balance due on INV-0001 is Rs. 383,750.75 — a payment can''t be more than that.');
 SELECT pg_temp.throws(format($$SELECT public.admin_record_invoice_payment(%s, 10, (now() AT TIME ZONE 'Asia/Colombo')::date + 2, 'cash')$$, current_setting('t.id1')),
-                      '22023', 'a payment dated in the future is refused', 'invalid_payment:%future%');
+                      '22023', 'a payment dated in the future is refused', 'invalid_receipt:%future%');
 SELECT pg_temp.throws(format($$SELECT public.admin_record_invoice_payment(%s, 10, (now() AT TIME ZONE 'Asia/Colombo')::date, 'crypto')$$, current_setting('t.id1')),
-                      '22023', 'an unknown method is refused', 'invalid_payment:%');
+                      '22023', 'an unknown method is refused', 'invalid_receipt:%');
 SELECT pg_temp.throws(format($$SELECT public.admin_record_invoice_payment(%s, 0.001, (now() AT TIME ZONE 'Asia/Colombo')::date, 'cash')$$, current_setting('t.id1')),
-                      '22023', 'amounts are in rupees and cents', 'invalid_payment:%');
+                      '22023', 'amounts are in rupees and cents', 'invalid_receipt:%');
 SELECT public.admin_record_invoice_payment(current_setting('t.id1')::int, 383750.75, (now() AT TIME ZONE 'Asia/Colombo')::date - 1, 'bank_transfer', 'BOC-123');
 SELECT pg_temp.eq((SELECT format('%s|%s|%s', payment_status, amount_paid, balance_due) FROM pg_temp.inv('t.id1')),
                   'paid|483750.75|0.00', 'paid in full');
 SELECT pg_temp.throws(format($$SELECT public.admin_record_invoice_payment(%s, 1, (now() AT TIME ZONE 'Asia/Colombo')::date, 'cash')$$, current_setting('t.id1')),
                       '22023', 'nothing more can be paid', 'overpayment:INV-0001 is already paid in full.');
 SELECT pg_temp.throws(format('SELECT public.admin_revert_invoice(%s)', current_setting('t.id1')), '22023', 'back to draft is refused while payments exist',
-                      'invoice_has_payments:INV-0001 has 2 payments recorded. Delete them first%');
+                      'invoice_has_payments:INV-0001 has 2 receipts recorded after the sale%');
 SELECT pg_temp.throws(format('SELECT public.admin_void_invoice(%s)', current_setting('t.id1')), '22023', 'void is refused while payments exist',
                       'invoice_has_payments:%');
 SELECT public.admin_delete_invoice_payment((SELECT max(id) FROM public.invoice_payments));
-SELECT pg_temp.eq((SELECT format('%s|%s', payment_status, balance_due) FROM pg_temp.inv('t.id1')), 'partial|383750.75', 'deleting a payment re-opens the balance');
-SELECT pg_temp.throws('SELECT public.admin_delete_invoice_payment(99999999)', '22023', 'an unknown payment is reported', 'payment_not_found:%');
-SELECT public.admin_delete_invoice_payment((SELECT max(id) FROM public.invoice_payments));
+SELECT pg_temp.eq((SELECT format('%s|%s', payment_status, balance_due) FROM pg_temp.inv('t.id1')), 'partial|383750.75', 'removing a payment (40: the receipt is voided, kept) re-opens the balance');
+SELECT pg_temp.eq((SELECT format('%s|%s', status, void_reason) FROM public.invoice_payments ORDER BY id DESC LIMIT 1), 'void|Removed by an admin', 'the receipt stays on record, void');
+SELECT pg_temp.throws('SELECT public.admin_delete_invoice_payment(99999999)', '22023', 'an unknown payment is reported', 'receipt_not_found:%');
+SELECT public.admin_delete_invoice_payment((SELECT max(id) FROM public.invoice_payments WHERE status = 'valid'));
 
 -- ── 8. back to draft and issue again: same number, stock returned and re-taken ──
 SELECT public.admin_revert_invoice(current_setting('t.id1')::int);
@@ -307,13 +311,13 @@ SELECT pg_temp.eq((SELECT count(*) FROM public.invoice_items WHERE invoice_id = 
 UPDATE public.invoice_settings SET next_number = 1 WHERE id;       -- the admin sets the counter back by mistake
 SELECT pg_temp.eq((SELECT updated_by FROM public.invoice_settings), current_setting('t.owner')::uuid, 'a settings edit records the admin');
 SELECT public.admin_save_invoice(jsonb_build_object('id', current_setting('t.id4')::int),
-  '[{"description":"Labour","quantity":1,"unit_price":5000}]');
+  jsonb_build_array(jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Labour', 'quantity', 1, 'unit_price', 5000)));
 SELECT public.admin_issue_invoice(current_setting('t.id4')::int);
 SELECT pg_temp.eq((SELECT format('%s|%s', number, next_number) FROM pg_temp.inv('t.id4'), public.invoice_settings),
                   'INV-0003|4', 'numbers already in use are skipped — never a duplicate');
 UPDATE public.invoice_settings SET number_prefix = 'DO/INV/', number_digits = 5 WHERE id;
 SELECT set_config('t.id5', (public.admin_save_invoice('{"bill_to_name":"Epsilon","issue_date":"2026-01-10"}',
-  '[{"description":"Repair","quantity":1,"unit_price":1000}]') #>> '{invoice,id}'), false);
+  jsonb_build_array(jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Repair', 'quantity', 1, 'unit_price', 1000))) #>> '{invoice,id}'), false);
 SELECT public.admin_issue_invoice(current_setting('t.id5')::int);
 SELECT pg_temp.eq((SELECT number FROM pg_temp.inv('t.id5')), 'DO/INV/00004', 'a new prefix and width apply to the next invoice');
 SELECT pg_temp.throws($$UPDATE public.invoice_settings SET number_prefix = 'IN V' WHERE id$$, '23514', 'prefixes have no spaces',
@@ -341,7 +345,7 @@ DELETE FROM public.products WHERE slug = 'inv-mouse';
 SELECT pg_temp.eq((SELECT format('%s|%s|%s|%s', description, variant_id, product_id, amount) FROM public.invoice_items WHERE invoice_id = current_setting('t.id7')::int),
                   'Inv Mouse|||5000.00', 'deleting the product keeps the invoice line (snapshot)');
 SELECT pg_temp.login(current_setting('t.owner')::uuid);
-SELECT public.admin_void_invoice(current_setting('t.id7')::int);
+SELECT public.admin_void_invoice(current_setting('t.id7')::int, 'Product withdrawn');
 SELECT pg_temp.eq((SELECT status FROM pg_temp.inv('t.id7')), 'void', 'voiding with the item gone still works (nothing to return)');
 
 -- ── 12. lookups ─────────────────────────────────────────────────────────────
@@ -368,7 +372,7 @@ SELECT pg_temp.eq((SELECT format('%s|%s|%s', count(*), min(source), bool_and(cus
 SELECT set_config('t.id8', (public.admin_save_invoice(
   jsonb_build_object('bill_to_name', 'Theta', 'issue_date', (now() AT TIME ZONE 'Asia/Colombo')::date - 10,
                      'due_date', (now() AT TIME ZONE 'Asia/Colombo')::date - 3, 'tax_value', 0),
-  '[{"description":"Overdue work","quantity":1,"unit_price":1000}]') #>> '{invoice,id}'), false);
+  jsonb_build_array(jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Overdue work', 'quantity', 1, 'unit_price', 1000))) #>> '{invoice,id}'), false);
 SELECT public.admin_issue_invoice(current_setting('t.id8')::int);
 SELECT public.admin_record_invoice_payment(current_setting('t.id8')::int, 400, (now() AT TIME ZONE 'Asia/Colombo')::date, 'cash');
 SELECT set_config('t.sum', public.admin_invoice_summary()::text, false);
@@ -405,7 +409,7 @@ SELECT set_config('t.id9', (public.admin_save_invoice(
   jsonb_build_array(
     jsonb_build_object('variant_id', current_setting('t.v8')::int, 'description', 'Inv Laptop 15', 'quantity', 2, 'unit_price', 150000,
                        'serial_numbers', '["SN-A1", "LEGACY-77"]'::jsonb),
-    jsonb_build_object('description', 'Bag (free text)', 'quantity', 1, 'unit_price', 0, 'serial_numbers', '["BAG-1"]'::jsonb)))
+    jsonb_build_object('variant_id', current_setting('t.svc')::int, 'description', 'Bag (free text)', 'quantity', 1, 'unit_price', 0, 'serial_numbers', '["BAG-1"]'::jsonb)))
   #>> '{invoice,id}'), false);
 SELECT pg_temp.eq(pg_temp.unit('SN-A1'), 'in_stock|-', 'a DRAFT doesn''t sell its serials');
 SELECT public.admin_issue_invoice(current_setting('t.id9')::int);
@@ -436,6 +440,6 @@ SELECT public.admin_save_invoice(jsonb_build_object('id', current_setting('t.id9
      FROM public.invoice_items WHERE invoice_id = current_setting('t.id9')::int));
 SELECT pg_temp.eq(pg_temp.unit('SN-A1') || ' ' || pg_temp.unit('SN-A2'), 'in_stock|- sold|line',
                   'a serial taken off an issued line goes back; the new one is sold');
-SELECT public.admin_void_invoice(current_setting('t.id9')::int);
+SELECT public.admin_void_invoice(current_setting('t.id9')::int, 'Wrong client');
 SELECT pg_temp.eq(pg_temp.unit('SN-A2'), 'in_stock|-', 'void gives the serials back');
 SELECT pg_temp.logout();

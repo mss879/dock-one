@@ -163,6 +163,9 @@ export function BasketView() {
               Proceed to checkout
             </Button>
           )}
+          <Link href="/quote?from=basket" className="label mt-2 flex min-h-10 items-center justify-center gap-2 font-semibold text-ink-2 hover:text-ink">
+            [ Request a quotation ]
+          </Link>
           {whatsappHref && (
             <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="label mt-2 flex min-h-10 items-center justify-center gap-2 font-semibold text-ink-2 hover:text-ink">
               <MessageCircle aria-hidden className="size-4" /> [ Order on WhatsApp ]

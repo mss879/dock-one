@@ -208,6 +208,14 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           <WishlistButton productId={product.id} productName={product.name} />
         </div>
       </div>
+      {variant && (
+        <a
+          href={`/quote?variant=${variant.id}&qty=${quantity}`}
+          className="label mt-3 inline-flex min-h-10 items-center gap-2 font-semibold text-ink-2 underline decoration-line underline-offset-4 hover:text-violet-ink hover:decoration-violet"
+        >
+          Buying for a business? Request a quotation
+        </a>
+      )}
     </div>
   );
 }

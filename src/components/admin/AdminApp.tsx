@@ -4,9 +4,10 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useEffect, type ComponentType } from "react";
 import { site } from "@/data/site";
-import { ADMIN_TABS, resolveAdminTab, type AdminTabKey } from "./registry";
+import { useAdminAccess } from "./access";
+import { ADMIN_TABS, adminTabHref, resolveAdminTab, tabAllowed, type AdminTabKey } from "./registry";
 import { TabErrorBoundary } from "./TabErrorBoundary";
-import { Skeleton } from "./ui";
+import { AdminNotice, EmptyState, Skeleton } from "./ui";
 
 /**
  * The admin client island (blueprint §11.1): URL-driven tabs (`/admin?tab=orders`, default the
@@ -42,15 +43,43 @@ const TAB_COMPONENTS = Object.fromEntries(
 ) as Record<AdminTabKey, ComponentType>;
 
 export function AdminApp() {
-  const tab = resolveAdminTab(useSearchParams().get("tab"));
+  const requested = useSearchParams().get("tab");
+  const access = useAdminAccess();
+  const allowed = ADMIN_TABS.filter((t) => tabAllowed(t, access.can, access.isAdmin));
+  let tab = resolveAdminTab(requested);
+  // Staff without the dashboard land on their first section instead.
+  if (!requested && !allowed.some((t) => t.key === tab.key) && allowed[0]) tab = allowed[0];
+  const permitted = allowed.some((t) => t.key === tab.key);
   const ActiveTab = TAB_COMPONENTS[tab.key];
 
   useEffect(() => {
     document.title = `${tab.label} — Admin — ${site.name}`;
   }, [tab.label]);
 
+  if (!permitted) {
+    return (
+      <EmptyState
+        title={allowed.length ? `Your account can't open ${tab.label}` : "No sections are open to your account yet"}
+        description={
+          allowed.length ? (
+            <>
+              Ask the owner for access, or go to <a className="underline" href={adminTabHref(allowed[0].key)}>{allowed[0].label}</a>.
+            </>
+          ) : (
+            "Ask the owner to tick the sections you need in Settings → Staff."
+          )
+        }
+      />
+    );
+  }
+  const viewOnly = !access.isAdmin && !access.can(tab.key, "edit");
   return (
     <TabErrorBoundary key={tab.key} label={tab.label}>
+      {viewOnly && (
+        <AdminNotice className="mb-4" title="View only">
+          You can look through {tab.label} but not change anything here — changes would be refused.
+        </AdminNotice>
+      )}
       <ActiveTab />
     </TabErrorBoundary>
   );

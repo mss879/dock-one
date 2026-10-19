@@ -7,6 +7,7 @@ import { formatCount, KpiRow } from "@/components/admin/dashboard/sections";
 import { customerName, normalizeAdminOrder, ORDERS_MIGRATION, type AdminOrder } from "@/components/admin/orders/types";
 import { getAdminTab } from "@/components/admin/registry";
 import { InventoryValueReport } from "@/components/admin/reports/InventoryValueReport";
+import { SalesReport } from "@/components/admin/reports/SalesReport";
 import { StockMovementReport } from "@/components/admin/reports/StockMovementReport";
 import {
   ExportTooLargeError,
@@ -69,8 +70,8 @@ function clampRange(value: DateRangeValue): { range: DateRangeValue; clamped: bo
   return { range: { ...value, from: addDays(value.to, -(MAX_REPORT_DAYS - 1)) }, clamped: true };
 }
 
-type ReportKind = "sales" | "inventory-value" | "stock-movement";
-const REPORT_KINDS: readonly ReportKind[] = ["sales", "inventory-value", "stock-movement"];
+type ReportKind = "sales" | "invoiced-sales" | "inventory-value" | "stock-movement";
+const REPORT_KINDS: readonly ReportKind[] = ["sales", "invoiced-sales", "inventory-value", "stock-movement"];
 
 /**
  * Three reports under one tab (deep link: /admin?tab=reports&report=inventory-value|stock-movement):
@@ -88,12 +89,21 @@ export default function ReportsTab() {
         value={kind}
         onChange={(next) => setAdminParams({ report: next === "sales" ? null : next }, { replace: true })}
         items={[
-          { key: "sales", label: "Sales & orders" },
+          { key: "sales", label: "Web orders" },
+          { key: "invoiced-sales", label: "Invoiced sales" },
           { key: "inventory-value", label: "Inventory value" },
           { key: "stock-movement", label: "Stock movement" },
         ]}
       >
-        {kind === "inventory-value" ? <InventoryValueReport /> : kind === "stock-movement" ? <StockMovementReport /> : <SalesReports />}
+        {kind === "inventory-value" ? (
+          <InventoryValueReport />
+        ) : kind === "stock-movement" ? (
+          <StockMovementReport />
+        ) : kind === "invoiced-sales" ? (
+          <SalesReport />
+        ) : (
+          <SalesReports />
+        )}
       </Tabs>
     </>
   );

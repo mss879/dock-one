@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getAdminIdentity } from "@/lib/auth";
+import { getAdminIdentity, identityCan } from "@/lib/auth";
 import { sendEmail } from "@/lib/email/send";
 import { deliveredEmail, orderStatusNoticeFromRpc, outForDeliveryEmail } from "@/lib/email/templates/orders";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) return json({ error: MESSAGES.notConfigured }, 503);
   const admin = await getAdminIdentity();
   if (!admin) return json({ error: MESSAGES.forbidden }, 403);
+  if (!identityCan(admin, "orders")) return json({ error: MESSAGES.forbidden }, 403);
 
   const parsed = await readJsonBody(request, 8 * 1024);
   if (!parsed.ok) return json({ error: parsed.status === 413 ? MESSAGES.tooLarge : MESSAGES.invalid }, parsed.status);

@@ -46,6 +46,8 @@ type Props = {
   units: UnitRecord[] | null;
   errors: Record<string, LineErrors>;
   showErrors: boolean;
+  /** Invoices sell inventory products only (40): no custom lines. Quotations allow them. */
+  allowCustom?: boolean;
 };
 
 const SERIAL_HINTS: Record<ReturnType<typeof serialState>, SerialHint> = {
@@ -56,7 +58,7 @@ const SERIAL_HINTS: Record<ReturnType<typeof serialState>, SerialHint> = {
   unrecorded: { tone: "muted", text: "Not in the stock records — it is printed only" },
 };
 
-export function LineItems({ lines, onChange, amounts, locked, readOnly, deductStock, facts, units, errors, showErrors }: Props) {
+export function LineItems({ lines, onChange, amounts, locked, readOnly, deductStock, facts, units, errors, showErrors, allowCustom = true }: Props) {
   const datalistId = `${useId().replace(/[^a-zA-Z0-9_-]/g, "")}-wty`;
   const [openExtras, setOpenExtras] = useState<Set<string>>(() => new Set());
   const editable = !locked && !readOnly;
@@ -120,8 +122,9 @@ export function LineItems({ lines, onChange, amounts, locked, readOnly, deductSt
         <div className="border border-dashed border-adm-line-strong bg-adm-panel-2 px-4 py-6 text-center text-[13px] leading-6 text-adm-mute">
           {editable ? (
             <>
-              No lines yet. Search the catalogue above (a barcode scanner works too), or add a custom line for a service, delivery or anything not in
-              the catalogue.
+              {allowCustom
+                ? "No lines yet. Search the catalogue above (a barcode scanner works too), or add a custom line for anything not in the inventory (it must be matched to an inventory product before the quotation becomes an invoice)."
+                : "No lines yet. Search the inventory above (a barcode scanner works too) — invoices can only contain inventory products and their variants."}
             </>
           ) : (
             "This invoice has no lines."
@@ -161,6 +164,14 @@ export function LineItems({ lines, onChange, amounts, locked, readOnly, deductSt
                           className="min-h-9 resize-none [field-sizing:content]"
                         />
                         {e.description && <FieldError>{e.description}</FieldError>}
+                        {line.variantId == null && !allowCustom && !readOnly && !locked && (
+                          <p className={`mt-1 text-xs ${e.product ? "font-semibold text-adm-ink" : "text-adm-accent-ink"}`}>
+                            Not an inventory product — remove this line and add the item from the inventory search.
+                          </p>
+                        )}
+                        {line.variantId == null && allowCustom && !readOnly && (
+                          <p className="mt-1 text-xs text-adm-mute">Custom line (not in the inventory)</p>
+                        )}
                       </div>
                     </div>
 
@@ -283,7 +294,7 @@ export function LineItems({ lines, onChange, amounts, locked, readOnly, deductSt
         </ol>
       )}
 
-      {editable && (
+      {editable && allowCustom && (
         <div>
           <AdminButton size="sm" icon={<ListPlus aria-hidden className="size-3.5" />} onClick={addCustom}>
             Add custom line

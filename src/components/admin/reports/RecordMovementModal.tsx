@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useAdminAccess } from "@/components/admin/access";
 import { AdminButton, DateTimeInput, Field, Input, Modal, NumberInput, Select, Textarea } from "@/components/admin/ui";
 import { formatDateTime } from "@/lib/admin/dates";
-import { useAdminQuery } from "@/lib/admin/query";
+import { AdminDataError, unwrapRows, useAdminQuery } from "@/lib/admin/query";
 import { toastResult } from "@/lib/admin/toast";
 import { adminRpc } from "@/lib/admin/write";
 import { fetchStockOptions, RECORDABLE_MOVEMENTS, STOCK_MIGRATION, type MovementType } from "./stock";
+
+const SUPPLIERS_MIGRATION = "41_suppliers_warranty.sql";
 
 /**
  * Admin → Inventory → Record movement (admin_record_stock_movement, 38): stock received, a customer
@@ -24,6 +27,12 @@ type Form = {
   occurredAt: string | null;
   reference: string;
   note: string;
+  /** Stock received (41): who supplied it, the month it came in, and the units it stamps. */
+  supplierId: string;
+  supplierMonth: string;
+  unitIds: number[];
+  warrantyExpiry: string;
+  warrantyCoverage: string;
 };
 type Errors = Partial<Record<"variantId" | "quantity" | "occurredAt" | "reference" | "note", string>>;
 
@@ -46,6 +55,8 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
   const [source, setSource] = useState<RecordTarget | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
+  const access = useAdminAccess();
+  const seesSuppliers = access.can("suppliers", "view");
   const options = useAdminQuery(({ supabase, signal }) => fetchStockOptions(supabase, signal), ["stock-report-options", target != null], {
     enabled: target != null,
     migration: STOCK_MIGRATION,
@@ -63,6 +74,11 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
             occurredAt: new Date().toISOString(),
             reference: "",
             note: "",
+            supplierId: "",
+            supplierMonth: new Date().toISOString().slice(0, 7),
+            unitIds: [],
+            warrantyExpiry: "",
+            warrantyCoverage: "",
           },
     );
     setShowErrors(false);
@@ -74,24 +90,65 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
   const update = (patch: Partial<Form>) => setForm((current) => (current ? { ...current, ...patch } : current));
   const kind = RECORDABLE_MOVEMENTS.find((m) => m.value === form?.type);
   const tracked = (options.data?.variants ?? []).filter((v) => v.tracked);
+  const received = form?.type === "received";
+  const suppliers = useAdminQuery(
+    async ({ supabase, signal }) =>
+      unwrapRows<{ id: number; name: string }>(await supabase.from("suppliers").select("id, name").eq("is_active", true).order("name").abortSignal(signal), SUPPLIERS_MIGRATION),
+    ["movement-suppliers", target != null],
+    { enabled: target != null && seesSuppliers, migration: SUPPLIERS_MIGRATION },
+  );
+  const units = useAdminQuery(
+    async ({ supabase, signal }) => {
+      const { data, error: e } = await supabase.rpc("admin_variant_units", { p_variant_id: Number(form?.variantId) }).abortSignal(signal);
+      if (e) throw new AdminDataError(e, SUPPLIERS_MIGRATION);
+      return (Array.isArray(data) ? (data as Record<string, unknown>[]) : [])
+        .filter((u) => u.status === "in_stock")
+        .map((u) => ({ id: Number(u.unit_id), serial: String(u.serial_number ?? ""), hasSupplier: u.has_supplier === true }));
+    },
+    ["movement-units", form?.variantId],
+    { enabled: target != null && received && seesSuppliers && /^\d+$/.test(form?.variantId ?? ""), migration: SUPPLIERS_MIGRATION },
+  );
 
   const save = async () => {
     if (!form || saving) return;
     setShowErrors(true);
     if (Object.keys(validate(form, ledgerStarted)).length > 0) return;
     setSaving(true);
-    const result = await adminRpc<{ stock_level: number; on_hand: number }>(
-      "admin_record_stock_movement",
-      {
-        p_variant_id: Number(form.variantId),
-        p_type: form.type,
-        p_quantity: form.quantity,
-        p_reference: form.reference.trim() || null,
-        p_note: form.note.trim() || null,
-        p_occurred_at: form.occurredAt,
-      },
-      { migration: STOCK_MIGRATION },
-    );
+    const withSupplier = form.type === "received" && form.supplierId !== "";
+    const result = withSupplier
+      ? await adminRpc<{ stock_level: number; on_hand: number }>(
+          "admin_record_stock_receipt",
+          {
+            p_variant_id: Number(form.variantId),
+            p_quantity: form.quantity,
+            p_supplier_id: Number(form.supplierId),
+            p_received_month: form.supplierMonth ? `${form.supplierMonth}-01` : null,
+            p_reference: form.reference.trim() || null,
+            p_note: form.note.trim() || null,
+            p_occurred_at: form.occurredAt,
+            p_unit_ids: form.unitIds.length ? form.unitIds : null,
+            p_warranty: form.unitIds.length
+              ? {
+                  ...(form.supplierMonth ? { supplier_start: form.supplierMonth } : {}),
+                  ...(form.warrantyExpiry ? { supplier_expiry: form.warrantyExpiry } : {}),
+                  ...(form.warrantyCoverage.trim() ? { supplier_coverage: form.warrantyCoverage.trim() } : {}),
+                }
+              : null,
+          },
+          { migration: SUPPLIERS_MIGRATION },
+        )
+      : await adminRpc<{ stock_level: number; on_hand: number }>(
+          "admin_record_stock_movement",
+          {
+            p_variant_id: Number(form.variantId),
+            p_type: form.type,
+            p_quantity: form.quantity,
+            p_reference: form.reference.trim() || null,
+            p_note: form.note.trim() || null,
+            p_occurred_at: form.occurredAt,
+          },
+          { migration: STOCK_MIGRATION },
+        );
     setSaving(false);
     const label = target?.label ?? tracked.find((v) => String(v.variantId) === form.variantId)?.label ?? "the product";
     if (
@@ -160,6 +217,51 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
           <Field label="Reference" optional error={error("reference")} hint="GRN, supplier invoice, return note…">
             <Input value={form.reference} maxLength={120} onChange={(e) => update({ reference: e.target.value })} />
           </Field>
+          {received && seesSuppliers && (
+            <>
+              <Field label="Supplier" optional hint="Who it came from (Suppliers tab).">
+                <Select
+                  value={form.supplierId}
+                  options={[{ value: "", label: "Not recorded" }, ...(suppliers.data ?? []).map((x) => ({ value: String(x.id), label: x.name }))]}
+                  onChange={(e) => update({ supplierId: e.target.value })}
+                />
+              </Field>
+              <Field label="Month received" optional>
+                <Input type="month" value={form.supplierMonth} disabled={!form.supplierId} onChange={(e) => update({ supplierMonth: e.target.value })} />
+              </Field>
+              {form.supplierId && (units.data ?? []).length > 0 && (
+                <div className="grid gap-3 border border-adm-line bg-adm-panel-2 p-3 sm:col-span-2">
+                  <p className="text-[13px] font-semibold text-adm-ink">Supplier warranty for these serial numbers (optional)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(units.data ?? []).map((u) => {
+                      const on = form.unitIds.includes(u.id);
+                      return (
+                        <label key={u.id} className={`inline-flex cursor-pointer items-center gap-1.5 border px-2 py-1 font-mono text-[12px] ${on ? "border-adm-ink bg-adm-panel" : "border-adm-line"}`}>
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => update({ unitIds: on ? form.unitIds.filter((x) => x !== u.id) : [...form.unitIds, u.id] })}
+                          />
+                          {u.serial}
+                          {u.hasSupplier && <span className="text-adm-mute">·set</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {form.unitIds.length > 0 && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Supplier warranty until">
+                        <Input type="date" value={form.warrantyExpiry} onChange={(e) => update({ warrantyExpiry: e.target.value })} />
+                      </Field>
+                      <Field label="Coverage">
+                        <Input value={form.warrantyCoverage} maxLength={500} placeholder="e.g. 1 year, parts and labour" onChange={(e) => update({ warrantyCoverage: e.target.value })} />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
           <Field label="Note" optional error={error("note")} className="sm:col-span-2">
             <Textarea
               rows={2}

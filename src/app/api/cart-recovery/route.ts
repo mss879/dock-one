@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
-import { getAdminIdentity } from "@/lib/auth";
+import { getAdminIdentity, identityCan } from "@/lib/auth";
 import {
   minGapMinutes,
   RECOVERY_BATCH_LIMIT,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
   } else {
     if (!isSameOrigin(request)) return json({ error: MESSAGES.forbidden }, 403);
     const admin = await getAdminIdentity();
-    if (!admin) return json({ error: "Unauthorized." }, 401);
+    if (!admin || !identityCan(admin, "abandoned-carts")) return json({ error: "Unauthorized." }, 401);
   }
 
   // 7. test overrides — only behind the secret; the admin button always runs the real schedule

@@ -12,7 +12,8 @@ the build contract is `docs/build/BUILD_SPEC.md`.
 | --- | --- |
 | Homepage — hero slides, category pop-outs with real product counts, promo tiles, featured collections, flash deals (with a real end time), new arrivals, best sellers (real sales), trust row, "order your way", store status, newsletter, ticker, top bar, footer — all edited in the admin | `/` |
 | Catalogue — all products, category, search (typo-tolerant), deals, new, brand/price filters, sorting, pagination | `/shop`, `/shop?category=laptops`, `/shop?q=…` |
-| Product page — priced variants, live stock band, reviews + star summary, rich results (JSON-LD) | `/product/[id]` |
+| Product page — priced variants, live stock band, reviews + star summary, rich results (JSON-LD), "N other people are looking at this" | `/product/[id]` |
+| Request a quotation (product page or basket) → a numbered quotation to view / download as PDF, emailed | `/quote`, `/quotation/[id]` |
 | Collections | `/collections`, `/collection/[id]` |
 | Basket — server-priced totals, free-delivery bar, promo code, WhatsApp order link | `/cart` + the basket drawer |
 | Checkout — home delivery or showroom pickup, cash on delivery or bank transfer (each only while the store offers it), order note, promo code | `/checkout` |
@@ -36,8 +37,13 @@ and orders as CSV and print; **inventory value** and **product-wise stock moveme
 as Excel, PDF and print, 38) · Products (variants, stock, images, specs) · Categories · Collections · Inventory ·
 Reviews (moderation) · Customers · Inquiries (reply by email) · Subscribers (mailing-list export) ·
 Finder insights · Assistant insights · Homepage · Pages & blog · Store settings · Site lock ·
-**Record movement** in Inventory (deliveries, customer / supplier returns, adjustments — every stock
-change is kept in the stock movement ledger) ·
+**Record movement** in Inventory (deliveries with supplier and month, customer / supplier returns,
+adjustments — every stock change is kept in the stock movement ledger) · **Quotations** (QT- numbers,
+website requests, convert a valid quotation into an invoice) · **Receipts** (a numbered receipt per
+payment; cash, card + receiving account, cheque + number, bank transfer; advances) · **Suppliers** ·
+**Warranty** (supplier vs customer warranty per serial) · **Staff** (owner only: staff sign-ins with
+per-section view / edit; staff never delete) · Reports → **Invoiced sales** (website / in-store, cost,
+payment breakdown, void reasons) ·
 **Invoices** (the client's invoice layout as a live A4 preview beside the editor; products added by
 name or by scanning a unit's serial number; one serial box per unit; gapless numbers given on issue;
 stock taken on issue; payments, overdue tracking, print / save as PDF; "Create invoice" from an order) ·

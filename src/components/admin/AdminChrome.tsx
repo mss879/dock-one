@@ -8,8 +8,9 @@ import { site } from "@/data/site";
 import { safeAdminRedirect } from "@/lib/admin/redirect";
 import { adminToast } from "@/lib/admin/toast";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
+import { AdminAccessProvider, accessHelpers, type AdminAccess } from "./access";
 import { DueAlertBar } from "./invoices/DueAlertBar";
-import { adminTabHref, adminTabsByGroup, resolveAdminTab, type AdminTabDef } from "./registry";
+import { ADMIN_TABS, adminTabHref, adminTabsByGroup, resolveAdminTab, tabAllowed, type AdminTabDef } from "./registry";
 import { AdminToaster, IconButton } from "./ui";
 
 /**
@@ -75,10 +76,12 @@ function NavList({
   active,
   collapsed,
   onNavigate,
+  visible,
 }: {
   active: AdminTabDef;
   collapsed: boolean;
   onNavigate: (tab: AdminTabDef, event: MouseEvent<HTMLAnchorElement>) => void;
+  visible: (tab: AdminTabDef) => boolean;
 }) {
   const listRef = useRef<HTMLElement>(null);
 
@@ -95,7 +98,7 @@ function NavList({
 
   return (
     <nav ref={listRef} aria-label="Admin sections" onKeyDown={onKeyDown} className="py-3">
-      {adminTabsByGroup().map(({ group, tabs }) => (
+      {adminTabsByGroup(visible).map(({ group, tabs }) => (
         <div key={group} className="mb-3 last:mb-0">
           <h2 className={collapsed ? "sr-only" : "px-4 pb-1 font-mono text-[10px] font-semibold tracking-[0.14em] text-adm-nav-mute uppercase"}>{group}</h2>
           {collapsed && <div aria-hidden className="mx-3 mb-1 border-t border-adm-nav-line" />}
@@ -129,8 +132,14 @@ function NavList({
   );
 }
 
-export function AdminChrome({ email, children }: { email: string; children: ReactNode }) {
-  const active = resolveAdminTab(useSearchParams().get("tab"));
+export function AdminChrome({ access, children }: { access: AdminAccess; children: ReactNode }) {
+  const email = access.email;
+  const helpers = accessHelpers(access);
+  const visible = (tab: AdminTabDef) => tabAllowed(tab, helpers.can, helpers.isAdmin);
+  const requested = useSearchParams().get("tab");
+  // No ?tab= and the dashboard is closed to this account: the first section it may open (as AdminApp).
+  const resolved = resolveAdminTab(requested);
+  const active = !requested && !visible(resolved) ? (ADMIN_TABS.find(visible) ?? resolved) : resolved;
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -227,7 +236,7 @@ export function AdminChrome({ email, children }: { email: string; children: Reac
           <Brand compact={collapsed} onClick={(event) => navigate(resolveAdminTab(null), event, false)} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <NavList active={active} collapsed={collapsed} onNavigate={(tab, event) => navigate(tab, event, false)} />
+          <NavList active={active} collapsed={collapsed} visible={visible} onNavigate={(tab, event) => navigate(tab, event, false)} />
         </div>
         <div className={`flex shrink-0 border-t border-adm-nav-line p-2 ${collapsed ? "justify-center" : "justify-end"}`}>
           <button
@@ -266,7 +275,7 @@ export function AdminChrome({ email, children }: { email: string; children: Reac
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {menuOpen && <NavList active={active} collapsed={false} onNavigate={(tab, event) => navigate(tab, event, true)} />}
+            {menuOpen && <NavList active={active} collapsed={false} visible={visible} onNavigate={(tab, event) => navigate(tab, event, true)} />}
           </div>
           <div className="shrink-0 border-t border-adm-nav-line p-4">
             <p className="truncate text-xs text-adm-nav-mute" title={email}>
@@ -284,8 +293,9 @@ export function AdminChrome({ email, children }: { email: string; children: Reac
             <span className="font-semibold text-adm-ink">{active.label}</span>
           </p>
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden max-w-[240px] truncate text-[13px] text-adm-mute md:inline" title={`Signed in as ${email}`}>
+            <span className="hidden max-w-[260px] truncate text-[13px] text-adm-mute md:inline" title={`Signed in as ${email}`}>
               {email}
+              {!helpers.isAdmin && <span className="ml-2 border border-adm-line-strong px-1.5 py-0.5 font-mono text-[10px] tracking-[0.08em] uppercase">Staff</span>}
             </span>
             <a
               href="/"
@@ -303,8 +313,10 @@ export function AdminChrome({ email, children }: { email: string; children: Reac
           </div>
         </header>
         <main ref={mainRef} id="admin-main" tabIndex={-1} aria-label={active.label} className="w-full max-w-[1440px] flex-1 px-3 py-5 outline-none sm:px-5 lg:px-8 lg:py-7">
-          <DueAlertBar />
-          {children}
+          <AdminAccessProvider access={access}>
+            {helpers.can("invoices") && <DueAlertBar />}
+            {children}
+          </AdminAccessProvider>
         </main>
       </div>
       <AdminToaster />

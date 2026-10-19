@@ -3,6 +3,7 @@ import {
   Boxes,
   ChartColumn,
   Compass,
+  FileSpreadsheet,
   FileText,
   FolderTree,
   Inbox,
@@ -12,12 +13,16 @@ import {
   LockKeyhole,
   Mail,
   Package,
+  Receipt,
   ReceiptText,
   ScrollText,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Star,
   TicketPercent,
+  Truck,
+  UserCog,
   Users,
   Wallet,
   type LucideIcon,
@@ -40,6 +45,8 @@ export type AdminTabKey =
   | "dashboard"
   | "orders"
   | "invoices"
+  | "quotations"
+  | "receipts"
   | "expenses"
   | "discounts"
   | "abandoned-carts"
@@ -48,6 +55,8 @@ export type AdminTabKey =
   | "categories"
   | "collections"
   | "inventory"
+  | "suppliers"
+  | "warranty"
   | "reviews"
   | "customers"
   | "inquiries"
@@ -57,7 +66,8 @@ export type AdminTabKey =
   | "homepage"
   | "content"
   | "settings"
-  | "site-lock";
+  | "site-lock"
+  | "staff";
 
 export type AdminTabOwner = "WP-A" | "WP-B" | "WP-C" | "WP-D" | "WP-E" | "WP-F" | "WP-G" | "WP-H" | "WP-I" | "WP-J" | "WP-K";
 
@@ -70,6 +80,8 @@ export type AdminTabDef = {
   owner: AdminTabOwner;
   /** One line: what the tab is for (shown in the stub and as the tab's description). */
   summary: string;
+  /** Only the owner (admin) — never offered to staff (39). Every other tab is the staff section of the same key. */
+  adminOnly?: boolean;
   /** Lazy loader — a literal import() so the bundler splits every tab into its own chunk. */
   load: () => Promise<{ default: ComponentType }>;
 };
@@ -101,6 +113,24 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     owner: "WP-C",
     summary: "Invoices in the store's own layout — scan serial numbers or search products by name, see the invoice build as you type, then issue, print or save as PDF and record payments. Numbers never skip; issuing takes the units out of stock.",
     load: () => import("./tabs/InvoicesTab"),
+  },
+  {
+    key: "quotations",
+    label: "Quotations",
+    group: "Commerce",
+    icon: FileSpreadsheet,
+    owner: "WP-C",
+    summary: "Every saved quotation — made here or requested on the website. Open one to edit it, or convert a valid quotation into an invoice.",
+    load: () => import("./tabs/QuotationsTab"),
+  },
+  {
+    key: "receipts",
+    label: "Receipts",
+    group: "Commerce",
+    icon: Receipt,
+    owner: "WP-C",
+    summary: "Money received — each payment gets its own receipt number. Record cash, card, cheque or bank transfer, link advances to invoices, print receipts.",
+    load: () => import("./tabs/ReceiptsTab"),
   },
   {
     key: "expenses",
@@ -135,7 +165,7 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     group: "Commerce",
     icon: ChartColumn,
     owner: "WP-H",
-    summary: "Sales and order reports for any Sri Lanka date range; inventory value and product-wise stock movement at selling prices — Excel, PDF and print.",
+    summary: "Invoiced sales (website, in-store or both) with cost and payment breakdown; web orders; inventory value and product-wise stock movement — Excel, PDF and print.",
     load: () => import("./tabs/ReportsTab"),
   },
   {
@@ -173,6 +203,24 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     owner: "WP-K",
     summary: "Stock level and low-stock threshold per variant, low stock first, edited inline; record deliveries, returns and adjustments for the stock movement report.",
     load: () => import("./tabs/InventoryTab"),
+  },
+  {
+    key: "suppliers",
+    label: "Suppliers",
+    group: "Catalogue",
+    icon: Truck,
+    owner: "WP-K",
+    summary: "Supplier details and what came in from each supplier, by month.",
+    load: () => import("./tabs/SuppliersTab"),
+  },
+  {
+    key: "warranty",
+    label: "Warranty",
+    group: "Catalogue",
+    icon: ShieldCheck,
+    owner: "WP-K",
+    summary: "Warranty per unit by product name or serial number — the supplier's warranty and the customer's warranty, each with its start, expiry and coverage.",
+    load: () => import("./tabs/WarrantyTab"),
   },
   {
     key: "reviews",
@@ -264,6 +312,16 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     summary: "Hold the storefront behind the “launching soon” page (headline, message, launch time) with a PIN for private previews.",
     load: () => import("./tabs/SiteLockTab"),
   },
+  {
+    key: "staff",
+    label: "Staff",
+    group: "Settings",
+    icon: UserCog,
+    owner: "WP-B",
+    summary: "Staff sign-ins (email and password) and what each person may view or edit. Staff never delete anything.",
+    adminOnly: true,
+    load: () => import("./tabs/StaffTab"),
+  },
 ];
 
 export const DEFAULT_ADMIN_TAB: AdminTabKey = "dashboard";
@@ -283,9 +341,14 @@ export function getAdminTab(key: AdminTabKey): AdminTabDef {
   return BY_KEY.get(key) as AdminTabDef;
 }
 
-/** Tabs grouped for the sidebar, in ADMIN_GROUPS order. */
-export function adminTabsByGroup(): { group: AdminGroup; tabs: AdminTabDef[] }[] {
-  return ADMIN_GROUPS.map((group) => ({ group, tabs: ADMIN_TABS.filter((tab) => tab.group === group) }));
+/** Tabs grouped for the sidebar, in ADMIN_GROUPS order (only those `visible` allows; empty groups dropped). */
+export function adminTabsByGroup(visible: (tab: AdminTabDef) => boolean = () => true): { group: AdminGroup; tabs: AdminTabDef[] }[] {
+  return ADMIN_GROUPS.map((group) => ({ group, tabs: ADMIN_TABS.filter((tab) => tab.group === group && visible(tab)) })).filter((g) => g.tabs.length > 0);
+}
+
+/** May this viewer open the tab? (admins: all; staff: their sections, never admin-only tabs) */
+export function tabAllowed(tab: AdminTabDef, can: (area: string) => boolean, isAdmin: boolean): boolean {
+  return isAdmin || (!tab.adminOnly && can(tab.key));
 }
 
 /** `/admin?tab=orders` (the dashboard is plain `/admin`). */
