@@ -540,6 +540,15 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   used (products, categories, homepage, pages, past order lines). Lowers Supabase cached egress.
 - **Check:** `SELECT proname FROM pg_proc WHERE proname IN ('admin_image_references', 'admin_replace_image_url');`
 
+### 44 — Everything connected · `44_connected_records.sql`
+- **Adds:** advance receipts link to a draft invoice (issuing then collects only the rest),
+  `admin_unlink_receipt`, a deleted draft hands its receipts back unlinked; web-order invoices never
+  take stock twice, take their payment from the order, one issued invoice per order, refunds void the
+  invoice, serials assigned later reach the invoice, warranty on website lines and on serials recorded
+  as sold; re-saving an issued invoice keeps warranty dates; converted website quotation requests
+  count as shop sales; staff section check on "back to draft"; stock hints for invoice staff.
+- **Check:** `SELECT proname FROM pg_proc WHERE proname IN ('admin_unlink_receipt', '_invoice_prepaid');`
+
 ---
 
 ## 3. Demo content (seeds 30–33) — optional, replace before launch

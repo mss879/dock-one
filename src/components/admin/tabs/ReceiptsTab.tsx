@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Banknote, Printer } from "lucide-react";
+import { Ban, Banknote, Link2, Printer } from "lucide-react";
 import { useState } from "react";
 import { useAdminAccess } from "@/components/admin/access";
 import { fetchReceiptPage, fetchReceiptsSummary, printReceipt, RECEIPTS_MIGRATION, receiptMethodText, type ReceiptFilter, type ReceiptRow } from "@/components/admin/receipts/receipts";
@@ -72,6 +72,8 @@ export default function ReceiptsTab() {
   const [error, setError] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<ReceiptRow | null>(null);
   const [voidReason, setVoidReason] = useState("");
+  const [linking, setLinking] = useState<ReceiptRow | null>(null);
+  const [linkNumber, setLinkNumber] = useState("");
   const { from, to } = pageRange(page);
   const today = todayYmd();
 
@@ -280,6 +282,15 @@ export default function ReceiptsTab() {
           ]}
           actions={[
             { label: "Print", icon: <Printer aria-hidden className="size-3.5" />, onClick: (r) => void printReceipt(r, settingsQuery.data ?? null) },
+            {
+              label: "Link to invoice",
+              icon: <Link2 aria-hidden className="size-3.5" />,
+              hidden: (r) => r.status === "void" || r.invoiceId != null || !(canEdit || access.can("invoices", "edit")),
+              onClick: (r) => {
+                setLinkNumber("");
+                setLinking(r);
+              },
+            },
             { label: "Void", icon: <Ban aria-hidden className="size-3.5" />, variant: "danger", hidden: (r) => r.status === "void" || !access.isAdmin, onClick: setVoiding },
           ]}
           empty={{ title: filtered ? "No receipts match" : "No receipts in this period", description: filtered ? "Try other filters." : "Payments recorded on invoices, or here, appear in this list." }}
@@ -349,6 +360,34 @@ export default function ReceiptsTab() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={linking != null}
+        onClose={() => setLinking(null)}
+        title={`Link ${linking?.receiptNumber ?? "this receipt"} to an invoice`}
+        description="Enter the invoice number. The receipt then counts towards that invoice. For an invoice still being made (a draft), open it and use “Use a receipt” in Advance payments."
+        confirmLabel="Link receipt"
+        onConfirm={async () => {
+          if (!linking) return { ok: false, message: "Nothing to link." };
+          const number = linkNumber.trim();
+          if (!number) return { ok: false, message: "Enter the invoice number, e.g. INV-0042." };
+          const supabase = getBrowserSupabase();
+          const { data } = supabase
+            ? await supabase.from("invoices").select("id, number").ilike("number", number).eq("doc_type", "invoice").limit(1).maybeSingle()
+            : { data: null };
+          if (!data) return { ok: false, message: `No invoice ${number} — check the number.` };
+          const result = await adminRpc("admin_allocate_receipt", { p_receipt_id: linking.id, p_invoice_id: Number((data as { id: number }).id) }, { migration: RECEIPTS_MIGRATION });
+          if (result.ok) {
+            adminToast.success(`Receipt ${linking.receiptNumber ?? ""} linked`, `It now pays towards ${String((data as { number: string }).number)}.`);
+            refresh();
+          }
+          return result;
+        }}
+      >
+        <Field label="Invoice no." required>
+          <Input value={linkNumber} maxLength={40} placeholder="INV-0042" onChange={(e) => setLinkNumber(e.target.value)} />
+        </Field>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={voiding != null}

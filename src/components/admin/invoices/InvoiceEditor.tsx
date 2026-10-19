@@ -508,7 +508,8 @@ export function InvoiceEditor({
 
   const startIssue = async () => {
     if (!form) return;
-    const problems = validateInvoiceForm(form, { forIssue: true });
+    const prepaid = payments.filter((p) => p.status === "valid" && p.source !== "sale").reduce((sum, p) => sum + p.amount, 0);
+    const problems = validateInvoiceForm(form, { forIssue: true, prepaid });
     if (problems.count > 0) {
       setShowErrors(true);
       const first = Object.values(problems.fields)[0] ?? "Some lines need attention.";
@@ -645,7 +646,10 @@ export function InvoiceEditor({
   const locked = !draft;
   const credit = form.saleType === "credit";
   const saleHint = SALE_TYPES.find((t) => t.value === form.saleType)?.hint;
-  const creditBalance = totals ? Math.max(totals.total - (form.upfrontAmount ?? 0), 0) : 0;
+  // Advances (44): receipts linked before the sale count towards it — issuing collects only the rest.
+  const advancePaid = payments.filter((p) => p.status === "valid" && p.source !== "sale").reduce((sum, p) => sum + p.amount, 0);
+  const advanceNumbers = payments.filter((p) => p.status === "valid" && p.source !== "sale" && p.receiptNumber).map((p) => p.receiptNumber).join(", ");
+  const creditBalance = totals ? Math.max(totals.total - advancePaid - (form.upfrontAmount ?? 0), 0) : 0;
   const fieldError = (key: keyof NonNullable<typeof errors>["fields"]) => (showErrors ? (errors?.fields[key] ?? null) : null);
   const nextNumber = settings
     ? form.docType === "quotation"
@@ -769,7 +773,7 @@ export function InvoiceEditor({
                 <span className="sr-only 2xl:hidden">Delete draft</span>
               </AdminButton>
             )}
-            {issued && canEdit && form.convertedInvoiceId == null && (validPayments.length === 0 || (access.isAdmin && validPayments.every((p) => p.source === "sale"))) && (
+            {issued && canEdit && form.convertedInvoiceId == null && validPayments.every((p) => p.source === "sale" || p.linkedAsAdvance) && (access.isAdmin || validPayments.every((p) => p.source !== "sale")) && (
               <AdminButton size="sm" variant="ghost" icon={<RotateCcw aria-hidden className="size-3.5" />} onClick={() => setDialog("revert")} title="Back to draft to change quantities or prices (keeps the number)">
                 <span className="hidden 2xl:inline">Edit as draft</span>
                 <span className="sr-only 2xl:hidden">Edit as draft</span>
@@ -1090,7 +1094,11 @@ export function InvoiceEditor({
             "Payment",
             draft ? "How the client pays. Issuing records what was paid at the sale." : "How the client paid — fixed once issued (the credit period can still change).",
             <div className="grid gap-4">
-              {form.saleType == null && !draft ? (
+              {form.orderId ? (
+                <p className="text-[13px] text-adm-ink-2">
+                  Paid through web order <span className="font-mono">{form.orderId}</span>: when the order is marked paid (Orders), the receipt is recorded here. Stock was already taken by the order.
+                </p>
+              ) : form.saleType == null && !draft ? (
                 <p className="text-[13px] text-adm-ink-2">Not set — this invoice was made before payment types. Record payments below as they come in.</p>
               ) : (
                 <>
@@ -1223,7 +1231,7 @@ export function InvoiceEditor({
                         : `Issuing takes ${trackedUnits} tracked unit${trackedUnits === 1 ? "" : "s"} out of stock, like a web order.`
                 }
                 checked={form.deductStock}
-                disabled={locked}
+                disabled={locked || form.orderId != null}
                 onChange={(deductStock) => update({ deductStock })}
               />}
               <Field label="Internal note" optional hint="Only admins see this — it's never printed." error={fieldError("internalNote")}>
@@ -1232,7 +1240,7 @@ export function InvoiceEditor({
             </div>,
           )}
 
-          {form.id != null && !draft && !quote && (
+          {form.id != null && !quote && (
             <PaymentsPanel
               payer={form.billToName}
               settings={settings}
@@ -1369,13 +1377,22 @@ export function InvoiceEditor({
                 ? `${trackedUnits} tracked unit${trackedUnits === 1 ? "" : "s"} come${trackedUnits === 1 ? "s" : ""} out of stock.`
                 : "Stock doesn't change."}
             </li>}
+            {!quote && advancePaid > 0 && (
+              <li>
+                {formatRs(advancePaid)} was paid in advance ({advanceNumbers}) and counts towards it.
+              </li>
+            )}
             {quote ? null : form.saleType === "credit" ? (
               <li>
-                {(form.upfrontAmount ?? 0) > 0 ? `${formatRs(form.upfrontAmount ?? 0)} paid now is recorded; ` : "Nothing is recorded as paid yet; "}
+                {(form.upfrontAmount ?? 0) > 0 ? `${formatRs(form.upfrontAmount ?? 0)} paid now is recorded; ` : advancePaid > 0 ? "Nothing more is recorded as paid now; " : "Nothing is recorded as paid yet; "}
                 the balance of {formatRs(creditBalance)} is due {form.dueDate ?? "—"}.
               </li>
             ) : form.saleType ? (
-              <li>{formatRs(totals?.total ?? 0)} is recorded as paid by {saleTypeLabel(form.saleType).toLowerCase()}.</li>
+              <li>
+                {Math.max((totals?.total ?? 0) - advancePaid, 0) > 0
+                  ? `${formatRs(Math.max((totals?.total ?? 0) - advancePaid, 0))} is recorded as paid by ${saleTypeLabel(form.saleType).toLowerCase()}.`
+                  : "Nothing more is collected — the advance covers it."}
+              </li>
             ) : null}
             <li>Quantities, prices, discount and VAT / tax are then fixed; client details, notes and serial numbers stay editable.</li>
           </ul>

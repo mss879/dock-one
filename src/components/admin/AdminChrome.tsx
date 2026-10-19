@@ -315,7 +315,7 @@ export function AdminChrome({ access, children }: { access: AdminAccess; childre
         </header>
         <main ref={mainRef} id="admin-main" tabIndex={-1} aria-label={active.label} className="w-full max-w-[1440px] flex-1 px-3 py-5 outline-none sm:px-5 lg:px-8 lg:py-7">
           <AdminAccessProvider access={access}>
-            {helpers.can("invoices") && <DueAlertBar />}
+            {(helpers.can("invoices") || helpers.can("receipts")) && <DueAlertBar />}
             {helpers.isAdmin && <ImageAutoCheck />}
             {children}
           </AdminAccessProvider>

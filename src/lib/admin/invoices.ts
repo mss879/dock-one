@@ -446,6 +446,8 @@ export type InvoicePayment = {
   note: string | null;
   /** "sale" = recorded automatically when the invoice was issued (28); "manual" = Record payment. */
   source: "manual" | "sale";
+  /** 44: linked while the invoice was still a draft — an advance taken before the sale. */
+  linkedAsAdvance: boolean;
   createdAt: string | null;
   /** Receipts (40): numbered, never deleted — voided by an admin with a reason. */
   receiptNumber: string | null;
@@ -563,6 +565,7 @@ export function paymentFromRow(row: Row): InvoicePayment {
     reference: strOrNull(row.reference),
     note: strOrNull(row.note),
     source: row.source === "sale" ? "sale" : "manual",
+    linkedAsAdvance: row.linked_as_advance === true,
     createdAt: strOrNull(row.created_at),
     receiptNumber: strOrNull(row.receipt_number),
     invoiceId: idOrNull(row.invoice_id),
@@ -753,7 +756,7 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const twoDecimals = (n: number) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6;
 const tooLong = (value: string, max: number) => value.trim().length > max;
 
-export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boolean } = {}): InvoiceErrors {
+export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boolean; /** advances already linked (44) */ prepaid?: number } = {}): InvoiceErrors {
   const fields: InvoiceErrors["fields"] = {};
   const lines: InvoiceErrors["lines"] = {};
   if (!isYmd(form.issueDate)) fields.issueDate = "Choose the invoice date.";
@@ -766,8 +769,8 @@ export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boo
     const upfront = form.upfrontAmount ?? 0;
     if (upfront < 0 || !twoDecimals(upfront) || upfront > INVOICE_LIMITS.unitPrice * 100) fields.upfrontAmount = "Enter the amount paid now in rupees (0 if nothing).";
     else if (options.forIssue) {
-      const total = computeTotals(form).total;
-      if (total > 0 && upfront >= total) fields.upfrontAmount = "That covers the whole invoice — choose Cash or Card instead of Credit.";
+      const left = computeTotals(form).total - (options.prepaid ?? 0);
+      if (left > 0 && upfront >= left) fields.upfrontAmount = "That covers the whole invoice — choose Cash or Card instead of Credit.";
     }
     if (form.creditDays != null && (!Number.isInteger(form.creditDays) || form.creditDays < 1 || form.creditDays > 365)) fields.creditDays = "Between 1 and 365 days.";
     else if (form.creditDays == null && (options.forIssue || form.status === "issued")) fields.creditDays = "Enter how many days the client has to pay the balance.";
@@ -1192,6 +1195,8 @@ export async function fetchOrderPrefill(
   form.billToPhone = order.phone;
   form.billToEmail = order.email;
   form.deductStock = false;
+  // 44: the order's own payment becomes the receipt (marked paid in Orders) — no "paid at the sale".
+  form.saleType = null;
   form.lines = items.map((item) =>
     emptyLine({
       productId: item.productId,

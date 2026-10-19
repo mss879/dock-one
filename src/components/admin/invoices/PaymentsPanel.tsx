@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Banknote, Link2, Printer } from "lucide-react";
+import { Ban, Banknote, Link2, Printer, Unlink } from "lucide-react";
 import { useState } from "react";
 import { useAdminAccess } from "@/components/admin/access";
 import { fetchUnallocatedReceipts, printReceipt, RECEIPTS_MIGRATION, receiptMethodText } from "@/components/admin/receipts/receipts";
@@ -17,6 +17,8 @@ import {
   type ReceiptMethod,
 } from "@/lib/admin/invoices";
 import { useAdminQuery } from "@/lib/admin/query";
+
+const LINK_MIGRATION = "44_connected_records.sql";
 import { adminToast } from "@/lib/admin/toast";
 import { adminRpc } from "@/lib/admin/write";
 
@@ -26,6 +28,10 @@ import { adminRpc } from "@/lib/admin/write";
  * bank transfer — several payments and methods per invoice, part payments, later collections);
  * linking a receipt recorded earlier (an advance); printing a receipt. Receipts are never deleted:
  * an admin voids one with a reason, and it stays listed.
+ *
+ * On a DRAFT invoice it is "Advance payments" (44): link the deposit / pre-order receipt while the
+ * invoice is being made; issuing then collects only the rest. A linked receipt can be unlinked
+ * (on an issued invoice, by the owner only).
  */
 type Draft = {
   amount: number | null;
@@ -135,23 +141,47 @@ export function PaymentsPanel({
       adminToast.error("Couldn't link the receipt", result.message);
       return;
     }
-    adminToast.success("Receipt linked", `It now pays towards ${number}.`);
+    adminToast.success("Receipt linked", status === "draft" ? "It counts as an advance — issuing collects only the rest." : `It now pays towards ${number}.`);
     onChanged(result.data);
     setLinkOpen(false);
   };
+
+  const unlink = async (payment: InvoicePayment) => {
+    const result = await adminRpc<InvoiceRpcResult>("admin_unlink_receipt", { p_receipt_id: payment.id }, { ...INVOICE_WRITE, migration: LINK_MIGRATION });
+    if (!result.ok) {
+      adminToast.error("Couldn't unlink the receipt", result.message);
+      return;
+    }
+    adminToast.success(`Receipt ${payment.receiptNumber ?? ""} unlinked`, "It is back in Receipts as not linked, ready to use elsewhere.");
+    onChanged(result.data);
+  };
+  const isDraft = status === "draft";
+  // This client's advances first (same "received from" name), then the rest, newest first.
+  const payerKey = payer.trim().toLowerCase();
+  const advanceList = [...(advances.data ?? [])].sort(
+    (a, b) => Number((b.payerName ?? "").trim().toLowerCase() === payerKey && payerKey !== "") - Number((a.payerName ?? "").trim().toLowerCase() === payerKey && payerKey !== ""),
+  );
+  const canUnlink = (payment: InvoicePayment) =>
+    payment.status === "valid" && payment.source !== "sale" && (isDraft ? canRecord : status === "issued" && access.isAdmin);
 
   const set = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
 
   return (
     <SectionCard
-      title="Payments & receipts"
+      title={isDraft ? "Advance payments" : "Payments & receipts"}
       description={
         status === "issued"
           ? "Each payment is a numbered receipt. Several payments and methods can settle one invoice — later collections included."
-          : "Payments can be recorded once the invoice is issued."
+          : isDraft
+            ? "Already received money for this sale (a deposit or pre-order)? Link its receipt here. When you issue the invoice, only the rest is collected."
+            : "This invoice is void."
       }
       actions={
-        status === "issued" && balanceDue > 0 && canRecord ? (
+        isDraft && total > 0 && balanceDue > 0 && canRecord ? (
+          <AdminButton size="sm" icon={<Link2 aria-hidden className="size-3.5" />} onClick={() => setLinkOpen(true)}>
+            Use a receipt
+          </AdminButton>
+        ) : status === "issued" && balanceDue > 0 && canRecord ? (
           <div className="flex flex-wrap gap-2">
             <AdminButton size="sm" icon={<Link2 aria-hidden className="size-3.5" />} onClick={() => setLinkOpen(true)}>
               Use a receipt
@@ -166,8 +196,8 @@ export function PaymentsPanel({
       <dl className="grid grid-cols-2 gap-px border border-adm-line bg-adm-line text-center sm:grid-cols-4">
         {[
           ["Invoice total", formatRs(total)],
-          ["Total paid", formatRs(paid)],
-          ["Balance", formatRs(balanceDue)],
+          [isDraft ? "Paid in advance" : "Total paid", formatRs(paid)],
+          [isDraft ? "Left to pay" : "Balance", formatRs(balanceDue)],
           ["Status", status !== "issued" ? "—" : balanceDue <= 0 ? "Paid" : paid > 0 ? "Part paid" : "Unpaid"],
         ].map(([label, value]) => (
           <div key={label} className="bg-adm-panel px-2 py-2.5">
@@ -202,6 +232,9 @@ export function PaymentsPanel({
                 </p>
               </div>
               <IconButton size="sm" label={`Print receipt ${payment.receiptNumber ?? ""}`} icon={<Printer className="size-3.5" />} onClick={() => void printReceipt({ ...payment, invoiceNumber: number }, settings)} />
+              {canUnlink(payment) && (
+                <IconButton size="sm" label={`Unlink receipt ${payment.receiptNumber ?? ""}`} icon={<Unlink className="size-3.5" />} onClick={() => void unlink(payment)} />
+              )}
               {status === "issued" && payment.status === "valid" && access.isAdmin && (
                 <IconButton size="sm" label={`Void receipt ${payment.receiptNumber ?? ""}`} icon={<Ban className="size-3.5" />} onClick={() => setVoiding(payment)} />
               )}
@@ -209,7 +242,7 @@ export function PaymentsPanel({
           ))}
         </ul>
       ) : (
-        status === "issued" && <p className="mt-3 text-[13px] text-adm-mute">No payments yet.</p>
+        status !== "void" && <p className="mt-3 text-[13px] text-adm-mute">{isDraft ? "No advance linked." : "No payments yet."}</p>
       )}
 
       <Modal
@@ -287,14 +320,14 @@ export function PaymentsPanel({
         )}
       </Modal>
 
-      <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title={`Use a receipt for ${number}`} description="Receipts recorded earlier that aren't linked to an invoice yet (advances).">
+      <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title={`Use a receipt for ${number}`} description="Receipts recorded earlier that aren't linked to an invoice yet (advances). Ones from this client are listed first.">
         {advances.loading && !advances.data ? (
           <p className="text-sm text-adm-mute">Loading…</p>
         ) : (advances.data ?? []).length === 0 ? (
           <p className="text-sm text-adm-mute">There are no unlinked receipts. Record the payment instead.</p>
         ) : (
           <ul className="divide-y divide-adm-line border border-adm-line">
-            {(advances.data ?? []).map((r) => (
+            {advanceList.map((r) => (
               <li key={r.id} className="flex items-center gap-3 px-3 py-2.5">
                 <div className="min-w-0 flex-1 text-[13px]">
                   <p className="font-semibold text-adm-ink">

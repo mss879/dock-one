@@ -27,6 +27,7 @@ import {
   TopProductsSection,
   TrendSection,
 } from "@/components/admin/dashboard/sections";
+import { InvoicedSalesRow } from "@/components/admin/dashboard/InvoicedSalesRow";
 import { getAdminTab } from "@/components/admin/registry";
 import { AdminButton, DateRangePicker, MissingMigrationBanner, QueryError, TabHeader } from "@/components/admin/ui";
 import { daysInRange, formatRangeLabel, rangeValue, type DatePreset, type DateRangeValue } from "@/lib/admin/dates";
@@ -131,6 +132,7 @@ export default function DashboardTab() {
         <KpiRow query={sales} />
         {/* One place for a sales failure (the tiles show "—"); a missing 17 is the banner above. */}
         {sales.error && sales.error.kind !== "missing_migration" && <QueryError error={sales.error} onRetry={sales.refetch} feature="Sales figures" />}
+        <InvoicedSalesRow from={range.from} to={range.to} />
         {days > 1 && !sales.error && <TrendSection query={sales} quietMigration={quiet} />}
         <div className="grid gap-4 xl:grid-cols-2">
           <FunnelSection query={funnel} quietMigration={quiet} />

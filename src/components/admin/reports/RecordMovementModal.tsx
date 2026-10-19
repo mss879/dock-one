@@ -106,7 +106,7 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
         .map((u) => ({ id: Number(u.unit_id), serial: String(u.serial_number ?? ""), hasSupplier: u.has_supplier === true }));
     },
     ["movement-units", form?.variantId],
-    { enabled: target != null && received && seesSuppliers && /^\d+$/.test(form?.variantId ?? ""), migration: SUPPLIERS_MIGRATION },
+    { enabled: target != null && received && access.can("suppliers", "edit") && /^\d+$/.test(form?.variantId ?? ""), migration: SUPPLIERS_MIGRATION },
   );
 
   const save = async () => {
@@ -135,7 +135,7 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
                 }
               : null,
           },
-          { migration: SUPPLIERS_MIGRATION },
+          { migration: SUPPLIERS_MIGRATION, revalidate: ["catalogue"] },
         )
       : await adminRpc<{ stock_level: number; on_hand: number }>(
           "admin_record_stock_movement",
@@ -147,7 +147,7 @@ export function RecordMovementModal({ target, onClose, onSaved }: { target: Reco
             p_note: form.note.trim() || null,
             p_occurred_at: form.occurredAt,
           },
-          { migration: STOCK_MIGRATION },
+          { migration: STOCK_MIGRATION, revalidate: ["catalogue"] },
         );
     setSaving(false);
     const label = target?.label ?? tracked.find((v) => String(v.variantId) === form.variantId)?.label ?? "the product";

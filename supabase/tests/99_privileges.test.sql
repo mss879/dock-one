@@ -134,7 +134,8 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.admin_supplier_deliveries(integer)',                        '41_suppliers_warranty'),
   ('public.admin_variant_units(integer)',                              '41_suppliers_warranty'),
   ('public.admin_image_references()',                                  '43_image_housekeeping'),
-  ('public.admin_replace_image_url(text,text)',                        '43_image_housekeeping');
+  ('public.admin_replace_image_url(text,text)',                        '43_image_housekeeping'),
+  ('public.admin_unlink_receipt(integer)',                             '44_connected_records');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);

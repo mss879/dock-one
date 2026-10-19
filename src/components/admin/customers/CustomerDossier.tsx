@@ -26,6 +26,7 @@ import { setAdminParams } from "@/lib/admin/url";
 import { updateRows } from "@/lib/admin/write";
 import { orderStatusLabel, orderStatusTone, paymentStatusLabel, paymentStatusTone } from "@/lib/orders";
 import { formatLkPhone } from "@/lib/sri-lanka";
+import { CustomerDocuments } from "./CustomerDocuments";
 import { CUSTOMERS_MIGRATION, customerName, isCustomerId, ORDERS_MIGRATION, type CustomerOrderRow, type CustomerRow } from "./types";
 
 /**
@@ -270,6 +271,8 @@ export function CustomerDossier({ customerId, onClose, onSaved }: { customerId: 
               <AdminPagination page={ordersPage} pageSize={ORDERS_PAGE} total={orders.data?.total ?? 0} onPageChange={setOrdersPage} loading={orders.loading} noun="orders" />
             </div>
           </SectionCard>
+
+          {row && <CustomerDocuments customerId={row.id} email={row.email} name={title} />}
         </div>
       )}
     </Drawer>

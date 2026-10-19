@@ -33,6 +33,7 @@ export function receiptFromRow(row: Row): ReceiptRow {
     reference: str(row.reference),
     note: str(row.note),
     source: row.source === "sale" ? "sale" : "manual",
+    linkedAsAdvance: row.linked_as_advance === true,
     createdAt: str(row.created_at),
     receiptNumber: str(row.receipt_number),
     invoiceId: row.invoice_id == null ? null : num(row.invoice_id),
