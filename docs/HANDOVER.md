@@ -4,6 +4,10 @@ What was built on top of the approved storefront design, how to set it up, and w
 before launch. The feature set follows the commerce blueprint (`docs/commerce-platform-blueprint.md`);
 the build contract is `docs/build/BUILD_SPEC.md`.
 
+For the shop team: **`docs/Dock-One-New-Features-Guide.pdf`** is a plain-language, illustrated guide to the
+October 2026 additions (staff accounts, quotations, receipts, reports, suppliers, warranty, website
+quotation requests) and how to use them in the admin.
+
 ## 1. What the site does
 
 **Storefront**
