@@ -9,6 +9,7 @@ import { safeAdminRedirect } from "@/lib/admin/redirect";
 import { adminToast } from "@/lib/admin/toast";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 import { AdminAccessProvider, accessHelpers, type AdminAccess } from "./access";
+import { ImageAutoCheck } from "./ImageAutoCheck";
 import { DueAlertBar } from "./invoices/DueAlertBar";
 import { ADMIN_TABS, adminTabHref, adminTabsByGroup, resolveAdminTab, tabAllowed, type AdminTabDef } from "./registry";
 import { AdminToaster, IconButton } from "./ui";
@@ -315,6 +316,7 @@ export function AdminChrome({ access, children }: { access: AdminAccess; childre
         <main ref={mainRef} id="admin-main" tabIndex={-1} aria-label={active.label} className="w-full max-w-[1440px] flex-1 px-3 py-5 outline-none sm:px-5 lg:px-8 lg:py-7">
           <AdminAccessProvider access={access}>
             {helpers.can("invoices") && <DueAlertBar />}
+            {helpers.isAdmin && <ImageAutoCheck />}
             {children}
           </AdminAccessProvider>
         </main>
