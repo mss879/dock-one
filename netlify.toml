@@ -1,5 +1,10 @@
-# Netlify secrets scanning: these three are public email addresses — shown on the website (contact
-# page, footer) and in every email the shop sends — not secrets. Without this, a build fails if any of
-# them is saved as "Contains secret values". Scanning stays on for everything else (RESEND_API_KEY too).
+# Netlify secrets scanning (it stays on for the code and everything the site serves).
+#
+# - Next.js's Turbopack keeps a build cache (.next/cache/turbopack/*.sst) that records the values of
+#   environment variables so it knows when to rebuild — RESEND_API_KEY included. That cache is kept
+#   between builds and is never published to visitors, so it is left out of the scan.
+# - The three email-address variables are public (shown on the site and in every email the shop
+#   sends), so they are never treated as secrets either.
 [build.environment]
+  SECRETS_SCAN_OMIT_PATHS = ".next/cache/**,.netlify/.next/cache/**"
   SECRETS_SCAN_OMIT_KEYS = "RESEND_FROM_EMAIL,RESEND_REPLY_TO,ORDER_NOTIFICATION_EMAIL"
