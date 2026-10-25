@@ -1,0 +1,5 @@
+# Netlify secrets scanning: these three are public email addresses — shown on the website (contact
+# page, footer) and in every email the shop sends — not secrets. Without this, a build fails if any of
+# them is saved as "Contains secret values". Scanning stays on for everything else (RESEND_API_KEY too).
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "RESEND_FROM_EMAIL,RESEND_REPLY_TO,ORDER_NOTIFICATION_EMAIL"
