@@ -330,7 +330,7 @@ Each category card on the homepage is built in three layers:
 ### 5.1 Details
 
 - **Name**: shown in the menu, on the card and on the category page.
-- **Slug**: the category's web address and id. It is filled in from the name and uses lower-case letters, numbers and hyphens. Changing it later changes the category's web address, and its products follow automatically. Automatic collections with a rule on the old slug must be updated by hand. **It also affects the header menu group** (see 5.5).
+- **Slug**: the category's web address and id. It is filled in from the name and uses lower-case letters, numbers and hyphens. Changing it later changes the category's web address, and its products follow automatically. Automatic collections with a rule on the old slug must be updated by hand. The navbar follows the new slug automatically (see 5.5).
 - **Tagline**: the short line on the category card and under the name on the category page.
 - **Description**
 - **Scene**: choose **Night (dark stage)**, **Paper (light stage)**, **Lime** or **Violet**. The light scenes (Paper, Lime) use dark text shading on the card.
@@ -367,13 +367,22 @@ The cut-out itself belongs to a **product**, not to the category.
 > - The hero product must be **active** for its cut-out to show.
 > - The angle and size of each cut-out on its card are set in code for the nine existing categories. New categories get a standard pose.
 
-### 5.5 Header menu groups (needs a developer)
+### 5.5 The navbar (the menu at the top of every page)
 
-On desktop, the header menu groups categories into **Computing**, **Accessories** and **Cameras**. The grouping is set in the website's code by category slug. You cannot change it in the admin.
+Go to Content → **Homepage & navbar** → the **Navbar** tab. The list shows the navbar from left to right, and the **Preview** above it shows how it will look. On phones the same items appear one under another in the menu.
 
-- A **new** category, or one whose **slug** you change, appears automatically under a group called **More**, so it never disappears from the menu.
-- To move it into Computing, Accessories or Cameras, ask your developer to add its slug to the menu groups (in `src/components/layout/nav.ts`).
-- Within each group, categories follow your **Sort order**.
+- A **Menu** is a dropdown with its own name (for example **Computing**). Under it, add the **categories**, **collections** or **links** it should hold.
+- A single **Category**, **Collection** or **Link** can also sit in the bar itself, for example **Deals** (`/shop?filter=deals`) or a collection such as **Gaming zone**.
+- Change the order with the arrows. Switch an item **off** to hide it but keep it for later; remove it with **×**.
+- A category or collection shows its own name unless you type a label. While it is hidden in Categories or Collections, the navbar leaves it out.
+- Click **Save navbar**. The store shows the new menu straight away.
+
+Good to know:
+
+- **Deals** and **New** are switched off while the 11.11 sale runs. Switch them back on here when you want them.
+- The electric sale item (11.11, Black Friday…) is not in this list. It always comes last, and you choose it in Catalogue → Collections → **Navbar** (see 4.4.1).
+- A category you haven't put anywhere appears under **More**, so a new category is never missing. To keep a category out of the navbar, add it to a menu and switch it off.
+- Keep the bar short. On a laptop screen about six items fit beside the search box, so put the rest inside a menu.
 
 ### 5.6 Deleting a category
 
@@ -390,5 +399,4 @@ Use **Delete** on the category's row. The database refuses to delete a category 
 - Schedules for promo tiles (hero slides **can** be scheduled).
 - More than one sale in the navbar at once, or switching the navbar sale on a timer (switch it by hand, see 4.4.1).
 - Choosing variants for products that rules add to a collection (add the product by hand instead, see 4.4.2).
-- Moving a category into a different header menu group (needs a developer, see 5.5).
 - Changing the pose (size and tilt) of a category's cut-out on its card.

@@ -71,6 +71,8 @@ body 15/24 · label 11–12. Prices are mono + `tabular-nums`.
 - 1px hairlines everywhere; hover promotes `line` → `ink`. No soft shadows on UI; only product
   cut-outs get a `drop-shadow` to sell the pop-out depth.
 - Container `max-w-[1360px]`, gutters 16 / 24 / 32px, with full-height side rails at `xl`.
+- The site chrome (top bar + header) is wider: `shell-wide`, up to 1920px with 48px gutters from
+  1536px, so the navbar spreads across a wide screen instead of sitting boxed in the middle.
 - Section rhythm 56px mobile / 88px desktop. 8px base spacing.
 
 ## 6. Primitives and states

@@ -278,11 +278,11 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
   },
   {
     key: "homepage",
-    label: "Homepage",
+    label: "Homepage & navbar",
     group: "Content",
     icon: LayoutTemplate,
     owner: "WP-B",
-    summary: "Hero slides, promo tiles, featured collections, the flash sale and the homepage content blocks.",
+    summary: "Hero slides, promo tiles, featured collections, the flash sale and the homepage content blocks — and the navbar menu on every page.",
     load: () => import("./tabs/HomepageTab"),
   },
   {

@@ -54,6 +54,12 @@ what to do right after, and how to check it worked.
 > code fills in, so push the code first; run 47 before it is live and the pages show `{tokens}`
 > until it is. Read the three pages once (admin → Pages & blog) — see the commitments listed in 47.
 
+> **Added 2026-11-10 — one new file: run 48** (safe to re-run; needs 04 and 39): the **navbar editor**.
+> The menu at the top of every page is stored in the database and edited in admin → Homepage &
+> navbar → Navbar: menus (dropdowns), categories, collections and links, in any order, each one
+> switchable off. It starts as the navbar was — Computing, Accessories, Cameras — with **Deals and
+> New switched off** while 11.11 runs. Before 48 runs, the website already shows that menu (built in).
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -612,6 +618,19 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   line whose setting is empty is left out. Any CMS page can use them.
 - **Order:** the code first (it fills the tokens), then 47.
 - **Check:** `SELECT slug, title, is_published, footer_group FROM public.cms_pages WHERE slug IN ('terms', 'returns', 'privacy');`
+
+### 48 — Navbar menu · `48_navbar_menu.sql`
+- **Adds:** `nav_menu_items` — the main menu (desktop navbar + phone menu): top-level items in order,
+  each a **menu** (a dropdown with its own name) or a single **category**, **collection** or **link**;
+  a menu holds categories, collections and links (one level). Every item has `is_visible`. Categories
+  and collections show their current name unless the item has a label, and drop out while hidden or
+  deleted (FK cascade; a changed slug is followed). Everyone reads it; the only writer is
+  `admin_save_nav_menu(items)`, which replaces the whole menu in one call (staff: Homepage → edit).
+- **Seeds once:** Computing, Accessories, Cameras with the categories the code grouped there, then
+  Deals and New **switched off**. An active category in no item still shows under "More".
+- **Switches on:** admin → Homepage & navbar → **Navbar**. The electric sale item (45) stays last and
+  is chosen in Collections. Before 48: the header shows the same built-in menu.
+- **Check:** `SELECT parent_id, position, kind, label, category_id, collection_id, href, is_visible FROM public.nav_menu_items ORDER BY COALESCE(parent_id, id), parent_id NULLS FIRST, position;`
 
 ---
 

@@ -5,6 +5,7 @@ import { ContentBlocksPanel } from "@/components/admin/homepage/ContentBlocksPan
 import { FeaturedCollectionsPanel } from "@/components/admin/homepage/FeaturedCollectionsPanel";
 import { FlashSalePanel } from "@/components/admin/homepage/FlashSalePanel";
 import { HeroSlidesPanel } from "@/components/admin/homepage/HeroSlidesPanel";
+import { NavbarPanel } from "@/components/admin/homepage/NavbarPanel";
 import { NewArrivalsPanel } from "@/components/admin/homepage/NewArrivalsPanel";
 import { PromoTilesPanel } from "@/components/admin/homepage/PromoTilesPanel";
 import { useContentContext } from "@/components/admin/homepage/shared";
@@ -15,12 +16,12 @@ import { setAdminParams, useAdminParam } from "@/lib/admin/url";
 /**
  * Admin → Content → Homepage (BUILD_SPEC §9 WP-B, §6): everything the homepage shows that isn't a
  * product — hero slides, promo tiles, the featured collections row, the flash sale (real end time +
- * flash-deal flags), the new-arrivals feature and the content blocks. Every save is confirmed
- * (error + row count) before the storefront's cache tag is refreshed. Deep link:
- * /admin?tab=homepage&section=hero|tiles|collections|flash|new|blocks.
+ * flash-deal flags), the new-arrivals feature and the content blocks — and the navbar menu shown on
+ * every page (48). Every save is confirmed (error + row count) before the storefront's cache tag is
+ * refreshed. Deep link: /admin?tab=homepage&section=hero|tiles|collections|flash|new|blocks|navbar.
  */
 
-const SECTIONS = ["hero", "tiles", "collections", "flash", "new", "blocks"] as const;
+const SECTIONS = ["hero", "tiles", "collections", "flash", "new", "blocks", "navbar"] as const;
 type Section = (typeof SECTIONS)[number];
 
 function isSection(value: string | null): value is Section {
@@ -56,6 +57,7 @@ export default function HomepageTab() {
           { key: "flash", label: "Flash sale" },
           { key: "new", label: "New arrivals" },
           { key: "blocks", label: "Content blocks" },
+          { key: "navbar", label: "Navbar" },
         ]}
       >
         {section === "hero" && <HeroSlidesPanel ctx={ctx} />}
@@ -64,6 +66,7 @@ export default function HomepageTab() {
         {section === "flash" && <FlashSalePanel />}
         {section === "new" && <NewArrivalsPanel />}
         {section === "blocks" && <ContentBlocksPanel ctx={ctx} />}
+        {section === "navbar" && <NavbarPanel />}
       </Tabs>
     </>
   );

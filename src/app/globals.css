@@ -183,6 +183,24 @@
   }
 }
 
+/* The site chrome (top bar + header): wider than the page content, so on a wide screen the navbar
+   spreads out instead of sitting boxed in the middle with big empty margins. */
+@utility shell-wide {
+  width: 100%;
+  max-width: 1920px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  @media (width >= 40rem) {
+    padding-inline: 24px;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 32px;
+  }
+  @media (width >= 96rem) {
+    padding-inline: 48px;
+  }
+}
+
 /* Mono uppercase label */
 @utility label {
   font-family: var(--font-mono);

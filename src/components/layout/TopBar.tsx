@@ -48,7 +48,7 @@ export async function TopBar() {
   const Icon = announcement ? Megaphone : Truck;
   return (
     <div className="border-b border-night-line bg-ink text-paper">
-      <div className="shell label flex h-9 items-center justify-between gap-6">
+      <div className="shell-wide label flex h-9 items-center justify-between gap-6">
         <div className="hidden shrink-0 items-center gap-4 text-night-mute md:flex">
           <span>
             Lang: <span className="text-paper">EN</span>

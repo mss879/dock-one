@@ -8,7 +8,7 @@ import { ElectricNavLink } from "./ElectricNavLink";
 import type { NavLink } from "./nav";
 
 /**
- * The phone-size menu. Items and contact come from the server header (active categories, store
+ * The phone-size menu. Items and contact come from the server header (the stored main menu, store
  * settings); `sale` is the navbar sale collection (11.11, Black Friday…), first, as an electric row.
  */
 export function MobileMenu({

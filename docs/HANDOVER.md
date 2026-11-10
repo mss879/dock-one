@@ -19,6 +19,7 @@ quotation requests) and how to use them in the admin.
 | Product page — priced variants, live stock band, reviews + star summary, rich results (JSON-LD), "N other people are looking at this" | `/product/[id]` |
 | Request a quotation (product page or basket) → a numbered quotation to view / download as PDF, emailed | `/quote`, `/quotation/[id]` |
 | Collections | `/collections`, `/collection/[id]` |
+| Navbar menu — stored in the database and edited in admin → Homepage & navbar → Navbar: dropdown menus, categories, collections and links in any order, each switchable off (Deals and New off while 11.11 runs); categories in no item show under "More". The top bar and header span wide screens (`shell-wide`, up to 1920 px) instead of the 1360 px page width (48) | header, phone menu |
 | Navbar sale — one collection at a time (11.11, Black Friday…) as an electric item in the main menu on every page (desktop header, phone header, phone menu), linking to its page; left off `/collections`. From 1024 to 1279 px wide, while a sale shows, the header keeps the tablet layout (menu button, sale item, full search) because the dropdown menu, the item and the search don't fit side by side (45) | header, `/collection/[id]` |
 | Variants in a collection — a hand-picked product can hold only some of its variants (the ones in a sale): the collection page shows just those (their price, discount, "Option(s): …"; a one-tap add adds that variant) and opens the product page on them; a product in the navbar sale opens on its sale variant and marks whether the shown option is in the sale (46) | `/collection/[id]`, `/product/[id]` |
 | Basket — server-priced totals, free-delivery bar, promo code, WhatsApp order link | `/cart` + the basket drawer |
@@ -82,7 +83,8 @@ Owner tips: publishing a page with the address (slug) `store-locator` in Pages &
 "Store locator" link to the top bar and mobile menu; the privacy, terms and returns pages appear in
 their footer columns automatically once published, under their own titles, and the terms and
 returns pages are also linked under "Place order" at checkout; a page left unpublished is hidden
-everywhere. Pages can quote store settings — `{delivery_fee}`, `{returns_window_days}`, `{email}`
+everywhere. The navbar is edited in Homepage & navbar → Navbar (keep it to about six items on a laptop
+screen). Pages can quote store settings — `{delivery_fee}`, `{returns_window_days}`, `{email}`
 and the rest listed in the editor's "Formatting help" — which always show today's Settings values
 (lib/page-tokens.ts); a line whose setting is empty is left out.
 
@@ -208,4 +210,12 @@ run in production mode without the Supabase URL and anon key.
   left out; the footer lists "Terms & conditions", "Refund policy" and "Privacy policy"; checkout
   shows the agreement line under Place order; the admin editor's preview fills the tokens and its
   help lists them (4 marked "not set now").
+- **Navbar editor (48, 2026-11-10):** `verify.sh` — 48 migration files applied twice, 38 checks for 48
+  (the seed with Deals/New off, public read, no direct writes, the save and its refusals, a failed
+  save leaving the menu unchanged, category delete / collection rename, staff Homepage edit vs view,
+  re-run). `next build` clean. Browser pass on a local Postgres + PostgREST stack: before 48 the header
+  shows Computing / Accessories / Cameras with no Deals or New; after 48 the editor (preview, Deals
+  back on, a collection added, Cameras moved first, saved) changes the desktop navbar and the phone
+  menu at once; the header spans 1920 px (logo at 48 px) with no sideways scroll at 1920, 1280, 1024
+  and 375 px.
 - **Not verified here:** real Resend delivery.
