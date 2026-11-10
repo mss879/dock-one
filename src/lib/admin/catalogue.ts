@@ -33,6 +33,8 @@ export const INVENTORY_MIGRATION = "05_inventory.sql";
 export const ADMIN_CATALOGUE_MIGRATION = "23_admin_catalogue.sql";
 /** The unit register: one serial number per physical unit (product editor stock intake). */
 export const SERIALS_MIGRATION = "25_serial_numbers.sql";
+/** collections.show_in_nav: the navbar sale collection (11.11, Black Friday…), one at a time. */
+export const NAV_COLLECTION_MIGRATION = "45_navbar_collections.sql";
 /** Products, variants, categories and collections are cached under this tag (lib/cache.ts). */
 export const CATALOGUE_TAGS: CacheTag[] = ["catalogue"];
 
@@ -134,12 +136,15 @@ export const COLLECTION_WRITE = {
     collections_feature_valid: "Pick at most two tile products.",
     collections_text_lengths:
       "A field is too long, or the cover image isn't a site path or an https address (title ≤ 120, tile line ≤ 200, description ≤ 4,000, SEO title ≤ 120, SEO description ≤ 320 characters).",
+    collections_nav_one: "Another collection was put in the navbar at the same moment. Reload the list and try again.",
   } as Record<string, string>,
   errors: COLLECTION_ERRORS,
   revalidate: CATALOGUE_TAGS,
 };
 
 export const COLLECTION_MEMBERS_WRITE = { ...COLLECTION_WRITE, migration: ADMIN_CATALOGUE_MIGRATION };
+/** A collections write that sets show_in_nav: a missing column means 45 isn't applied yet. */
+export const COLLECTION_NAV_WRITE = { ...COLLECTION_WRITE, migration: NAV_COLLECTION_MIGRATION };
 
 /** admin_set_product_serials (25) — business codes and the register's constraints → copy. */
 export const SERIALS_WRITE = {
@@ -1234,6 +1239,10 @@ export type CollectionForm = {
   match: "any" | "all";
   isActive: boolean;
   isFeatured: boolean;
+  /** The navbar sale collection (45): switching it on takes the current one out. */
+  showInNav: boolean;
+  /** false while 45 isn't applied (the column is missing): the switch is shown off and never sent. */
+  navReady: boolean;
   /** [back, front] — at most two */
   featureProductIds: number[];
   sortOrder: number | null;
@@ -1253,6 +1262,8 @@ export type AdminCollectionRow = {
   match: "any" | "all";
   isActive: boolean;
   isFeatured: boolean;
+  /** In the navbar (45); null = the column isn't there yet (45 not applied). */
+  showInNav: boolean | null;
   featureProductIds: number[];
   sortOrder: number;
   seoTitle: string | null;
@@ -1274,6 +1285,7 @@ export function normalizeCollectionRow(row: Row): AdminCollectionRow {
     match: row.match === "all" ? "all" : "any",
     isActive: row.is_active !== false,
     isFeatured: bool(row.is_featured),
+    showInNav: Object.prototype.hasOwnProperty.call(row, "show_in_nav") ? bool(row.show_in_nav) : null,
     featureProductIds: (Array.isArray(row.feature_product_ids) ? row.feature_product_ids : [])
       .map((id) => toNumber(id, 0))
       .filter((id) => Number.isInteger(id) && id > 0)
@@ -1283,6 +1295,17 @@ export function normalizeCollectionRow(row: Row): AdminCollectionRow {
     seoDescription: toText(row.seo_description, 320),
     memberCount: embeddedCount(row.member_count),
   };
+}
+
+/** The collection in the navbar right now (45), with its product count — or null when there is none. */
+export type NavCollectionStatus = { id: string; title: string; isActive: boolean; memberCount: number };
+
+export async function fetchNavCollectionStatus(supabase: SupabaseClient, signal?: AbortSignal): Promise<NavCollectionStatus | null> {
+  let query = supabase.from("collections").select("id, title, is_active, member_count:product_collections(count)").eq("show_in_nav", true).limit(1);
+  if (signal) query = query.abortSignal(signal);
+  const [row] = unwrapRows<Row>(await query, NAV_COLLECTION_MIGRATION);
+  if (!row) return null;
+  return { id: String(row.id ?? ""), title: toText(row.title, 120) ?? String(row.id ?? ""), isActive: row.is_active !== false, memberCount: embeddedCount(row.member_count) };
 }
 
 export async function fetchCollectionPage(
@@ -1298,7 +1321,8 @@ export async function fetchCollectionPage(
   return { ...page, rows: page.rows.map(normalizeCollectionRow) };
 }
 
-export function emptyCollectionForm(): CollectionForm {
+/** `navReady`: whether 45 is applied, as far as the list knows (a new form has no row to tell). */
+export function emptyCollectionForm(navReady = true): CollectionForm {
   return {
     originalId: null,
     id: "",
@@ -1313,6 +1337,8 @@ export function emptyCollectionForm(): CollectionForm {
     match: "any",
     isActive: true,
     isFeatured: false,
+    showInNav: false,
+    navReady,
     featureProductIds: [],
     sortOrder: 100,
     seoTitle: "",
@@ -1335,6 +1361,8 @@ export function collectionFormFromRow(row: AdminCollectionRow): CollectionForm {
     match: row.match,
     isActive: row.isActive,
     isFeatured: row.isFeatured,
+    showInNav: row.showInNav === true,
+    navReady: row.showInNav !== null,
     featureProductIds: row.featureProductIds,
     sortOrder: row.sortOrder,
     seoTitle: row.seoTitle ?? "",
@@ -1377,9 +1405,14 @@ export function hasErrors(errors: Record<string, unknown>): boolean {
   return Object.values(errors).some((value) => (value && typeof value === "object" ? Object.keys(value).length > 0 : Boolean(value)));
 }
 
-/** The collections row to insert/update (parent/brand/theme/page_content are left as they are). */
+/**
+ * The collections row to insert/update (parent/brand/theme/page_content are left as they are).
+ * show_in_nav is sent once 45 is applied, or when it is being switched on (then a missing column
+ * fails the save with "apply 45" — see COLLECTION_NAV_WRITE); so saves keep working before 45.
+ */
 export function collectionRow(form: CollectionForm): Row {
   return {
+    ...(form.navReady || form.showInNav ? { show_in_nav: form.showInNav } : {}),
     id: trimmed(form.id),
     title: trimmed(form.title),
     subtitle: orNull(form.subtitle),

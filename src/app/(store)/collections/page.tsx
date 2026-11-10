@@ -2,18 +2,22 @@ import type { Metadata } from "next";
 import { CollectionTile } from "@/components/catalogue/CollectionTile";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { getCollections } from "@/lib/catalogue";
+import { getCollections, getNavCollection } from "@/lib/catalogue";
 
 /*
  * /collections — every active collection, featured (homepage) ones first, then by the admin's
- * sort order (blueprint §5; BUILD_SPEC §7). Static/ISR: the catalogue tag refreshes it.
+ * sort order (blueprint §5; BUILD_SPEC §7). The navbar sale collection (11.11, Black Friday…) is
+ * left out: it shows in the navbar only (45_navbar_collections.sql). Static/ISR: the catalogue
+ * tag refreshes it.
  */
 
 export const metadata: Metadata = { title: "Collections", alternates: { canonical: "/collections" } };
 
 export default async function CollectionsPage() {
-  const collections = await getCollections();
-  const ordered = [...collections].sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+  const [collections, navCollection] = await Promise.all([getCollections(), getNavCollection()]);
+  const ordered = collections
+    .filter((collection) => collection.id !== navCollection?.id)
+    .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
 
   return (
     <main id="main" className="shell pt-8 pb-24 lg:pt-12">

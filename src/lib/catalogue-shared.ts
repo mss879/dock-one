@@ -127,6 +127,13 @@ export type Collection = {
   seoDescription: string | null;
 };
 
+/**
+ * The navbar sale collection: one "major" collection at a time (11.11, Black Friday…), switched
+ * on in admin → Collections (45_navbar_collections.sql). Its title is the menu label; the item
+ * links to its page.
+ */
+export type NavCollection = { id: string; title: string };
+
 export type Brand = { name: string; count: number };
 
 // ── Hrefs ─────────────────────────────────────────────────────────────────────
@@ -390,6 +397,12 @@ export function normalizeCategory(row: Row, extras: { hero?: ProductArt | null; 
     hero: extras.hero ?? null,
     productCount: extras.productCount ?? null,
   };
+}
+
+export function normalizeNavCollection(row: Row): NavCollection | null {
+  const id = typeof row.id === "string" ? row.id : "";
+  const title = toText(row.title, 120);
+  return isSlug(id) && title ? { id, title } : null;
 }
 
 export function normalizeCollection(row: Row, featureProducts: ProductArt[] = []): Collection | null {

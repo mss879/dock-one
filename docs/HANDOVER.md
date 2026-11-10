@@ -19,6 +19,7 @@ quotation requests) and how to use them in the admin.
 | Product page — priced variants, live stock band, reviews + star summary, rich results (JSON-LD), "N other people are looking at this" | `/product/[id]` |
 | Request a quotation (product page or basket) → a numbered quotation to view / download as PDF, emailed | `/quote`, `/quotation/[id]` |
 | Collections | `/collections`, `/collection/[id]` |
+| Navbar sale — one collection at a time (11.11, Black Friday…) as an electric item in the main menu on every page (desktop header, phone header, phone menu), linking to its page; left off `/collections`. From 1024 to 1279 px wide, while a sale shows, the header keeps the tablet layout (menu button, sale item, full search) because the dropdown menu, the item and the search don't fit side by side (45) | header, `/collection/[id]` |
 | Basket — server-priced totals, free-delivery bar, promo code, WhatsApp order link | `/cart` + the basket drawer |
 | Checkout — home delivery or showroom pickup, cash on delivery or bank transfer (each only while the store offers it), order note, promo code | `/checkout` |
 | Bank transfer — the store's account (Bank of Ceylon, Vishaka branch, Dock One Solutions Pvt Ltd, 79503030) shown as a card with copy buttons at checkout, and with the amount and the order number as reference on the order page, in the confirmation email, on tracking, in the customer's account and on the printed invoice — until the owner marks the order paid | `/checkout`, `/order/[id]`, `/track`, `/customer/dashboard` |
@@ -168,4 +169,12 @@ run in production mode without the Supabase URL and anon key.
   headphones) plus a text turn through the real prompt and tools, then photo and text turns through
   `POST /api/assistant` on the dev server against the live project: every verdict, card and stock
   band was right.
+- **Navbar sale (45, 2026-11-10):** `verify.sh` — 45 migration files applied twice, 46 test files,
+  2,112 checks (32 for 45: one at a time, the 11.11 → Black Friday switch, the unique-index backstop,
+  RLS, created-once seeds). `next build` clean. Browser pass on a local Postgres + PostgREST stack:
+  the item at 320–1280 px (no sideways scroll) and in the phone menu, the list switch with its
+  confirm step and "Also hide", the editor's Navbar section on a production build, and the site and
+  admin with 45 NOT applied (no navbar item, ordinary saves still work, "run 45" notes).
+  **Not checked:** Safari's support for the crackle (the SMIL step of the noise seed) — without it the
+  arcs stand still and the flicker and surges still run.
 - **Not verified here:** real Resend delivery.

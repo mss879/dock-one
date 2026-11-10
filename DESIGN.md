@@ -102,6 +102,17 @@ CSS only, transform/opacity/filter only. Easing `cubic-bezier(0.2, 0, 0, 1)`; 15
 (sheet, lifts), 500ms (pop-out). Hero autoplay is driven by the progress bar animation (7s) and pauses on
 hover/focus. `prefers-reduced-motion`: no autoplay, no ticker, no lifts.
 
+**Navbar sale item — "electric"** (`src/components/layout/ElectricNavLink.tsx`, migration 45): the one
+collection switched on in admin → Collections → Navbar (11.11, Black Friday…) is an ink chamfer chip
+with a lime mono label and bolt, wrapped in crackling lime + violet arcs: the chip's outline in SVG,
+pushed around by `feTurbulence` → `feDisplacementMap`, its noise seed stepped ~10×/s (SMIL), plus a
+blurred lime halo and two sparks that flash off the chamfered corners. The bolt flickers like a neon
+tube and the arcs surge (CSS opacity loops in `globals.css`). Hover inverts the chip to lime/ink. It
+is the one place that animates an SVG filter and glows — reserved for this item. Reduced motion: the
+arcs stay still and the loops stop. Placement: end of the desktop nav; before the search on tablets
+(and from 1024 to 1279 px, where the dropdown nav, the item and the search don't fit side by side);
+beside the search on phones; first row of the phone menu (arcs drawn inside the row).
+
 **Homepage preloader — "Docking"** (`src/components/preloader`): ~3 s, homepage only, once per browser
 session, skipped under reduced motion. On a night grid the DO monogram's D, O and lens fly in and dock
 inside a HUD target (brackets lock lime, "STATUS: DOCKED"), the "DOCK ONE_ / SOLUTIONS" wordmark rises,

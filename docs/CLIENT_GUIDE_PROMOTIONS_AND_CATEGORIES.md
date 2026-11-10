@@ -243,6 +243,25 @@ You may see two warnings: "Tile art incomplete" means fewer than two tile produc
 
 **Tip for a sale:** create a "Sale" collection, add the products, then point a hero slide button or a promo tile at it with **Collection → Sale**.
 
+### 4.4.1 The navbar sale (11.11, Black Friday, Cyber Monday)
+
+One collection at a time can sit in the store's main menu as a glowing, electric item, on every page: at the end of the menu on computers, next to the search on phones and tablets, and first in the phone menu. Clicking it opens that collection's page. It shows **only** there: it doesn't add anything to the homepage, and it is left off the All collections page.
+
+Two collections are ready for you: **11.11** (already in the navbar) and **Black Friday** (hidden, waiting). Both start with no products.
+
+**Add the products.** Go to Catalogue → **Collections**, click **11.11**, and under **Products** add the products by hand (**Hand-picked**) or let rules choose them (**Automatic**). Click **Save collection**. Set the sale prices on the products themselves (**Price** and **Compare-at price**, see 3, Step 3).
+
+**Switch to Black Friday.** On the Collections list, turn on the **Navbar** switch on the **Black Friday** row and confirm. Black Friday takes the place of 11.11 straight away.
+
+- Leave **Also hide 11.11** ticked when the 11.11 sale is over: its page and its tile go away. Untick it to keep its page open.
+- If Black Friday is hidden, switching it into the navbar also switches it on (Active).
+
+You can also do this inside a collection: **Navbar** → **Show in the navbar**, then **Save collection**. The preview shows how the item will look; the title is its label, so keep it short.
+
+**Where to check it:** the **Navbar sale** panel at the top of the Collections list shows what is in the navbar now and warns you when it has no products yet or is hidden. **Take it out** removes it (the menu then shows no sale).
+
+**For a new sale** (Cyber Monday, Christmas…): click **New collection**, give it a short title, add the products, switch **Show in the navbar** on and save.
+
 ### 4.5 New arrivals
 
 On the **New arrivals** tab:
@@ -349,5 +368,6 @@ Use **Delete** on the category's row. The database refuses to delete a category 
 - A start time for the flash sale (it starts when you save the end time), or more than one flash sale at once.
 - Automatic sale prices. Set **Price** and **Compare-at price** on each product by hand, and put them back afterwards.
 - Schedules for promo tiles (hero slides **can** be scheduled).
+- More than one sale in the navbar at once, or switching the navbar sale on a timer (switch it by hand, see 4.4.1).
 - Moving a category into a different header menu group (needs a developer, see 5.5).
 - Changing the pose (size and tilt) of a category's cut-out on its card.

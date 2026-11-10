@@ -9,6 +9,7 @@ import {
   isSlug,
   normalizeCategory,
   normalizeCollection,
+  normalizeNavCollection,
   normalizeProductArt,
   normalizeProductCard,
   normalizeProductDetail,
@@ -18,6 +19,7 @@ import {
   type Brand,
   type Category,
   type Collection,
+  type NavCollection,
   type ProductArt,
   type ProductCardData,
   type ProductDetail,
@@ -399,6 +401,27 @@ const readCollection = cached(
   ["catalogue:collection:v1"],
   TAGS,
 );
+
+// Its own read, so the column 45 adds never touches the collection reads above: until 45 is
+// applied this one fails soft (logging "apply 45_navbar_collections.sql") and the navbar is as before.
+const NAV_MIGRATION = "45_navbar_collections.sql";
+
+const readNavCollection = cached(
+  async (): Promise<NavCollection | null> => {
+    // 45 keeps at most one switched on; limit(1) keeps this read safe regardless.
+    const { data, error } = await db().from("collections").select("id, title").eq("is_active", true).eq("show_in_nav", true).order("id").limit(1);
+    if (error) throwDbError("catalogue.getNavCollection", error, NAV_MIGRATION);
+    const [row] = rowsOf(data);
+    return row ? normalizeNavCollection(row) : null;
+  },
+  ["catalogue:nav-collection:v1"],
+  TAGS,
+);
+
+/** The navbar's sale collection (11.11, Black Friday…): switched on and active, or null. Fails soft → null. */
+export function getNavCollection(): Promise<NavCollection | null> {
+  return readFailSoft("catalogue.getNavCollection", () => readNavCollection(), null);
+}
 
 /** One active collection by slug, or null. Its products: `listProducts({ collectionId: slug })`. */
 export async function getCollection(slug: string): Promise<Collection | null> {

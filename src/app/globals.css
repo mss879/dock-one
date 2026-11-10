@@ -27,6 +27,11 @@
   --animate-blink: blink 1.1s steps(2, start) infinite;
   --animate-toast-in: toast-in 0.3s var(--ease-brut) both;
   --animate-pop: pop 0.4s var(--ease-brut);
+  /* Navbar sale collections (ElectricNavLink): a neon-tube flicker on the bolt, surges on the arcs. */
+  --animate-electric-flicker: electric-flicker 3.4s linear infinite;
+  --animate-electric-surge: electric-surge 2.6s linear infinite;
+  --animate-electric-spark: electric-spark 2.9s linear infinite;
+  --animate-electric-spark-late: electric-spark 3.7s linear 1.2s infinite;
 
   @keyframes ticker {
     to {
@@ -47,6 +52,63 @@
   @keyframes pop {
     40% {
       transform: scale(1.18);
+    }
+  }
+  @keyframes electric-flicker {
+    0%,
+    6%,
+    8.5%,
+    11%,
+    61%,
+    63.5%,
+    100% {
+      opacity: 1;
+    }
+    7%,
+    10%,
+    62% {
+      opacity: 0.2;
+    }
+  }
+  @keyframes electric-surge {
+    0%,
+    100% {
+      opacity: 0.85;
+    }
+    18% {
+      opacity: 0.55;
+    }
+    19%,
+    21% {
+      opacity: 1;
+    }
+    20% {
+      opacity: 0.35;
+    }
+    52% {
+      opacity: 0.9;
+    }
+    74% {
+      opacity: 0.6;
+    }
+    75%,
+    77% {
+      opacity: 1;
+    }
+  }
+  /* the element rests at opacity 0 (so reduced motion leaves it hidden); a double flash mid-cycle */
+  @keyframes electric-spark {
+    0%,
+    40%,
+    42.5%,
+    44%,
+    46%,
+    100% {
+      opacity: 0;
+    }
+    41%,
+    45% {
+      opacity: 1;
     }
   }
   @keyframes hero-progress {

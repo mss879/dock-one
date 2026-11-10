@@ -34,6 +34,13 @@ what to do right after, and how to check it worked.
 > phone, and "people viewing this product". Re-run 40 after any re-run of 26 or 28, and 39 after any
 > re-run of 02.
 
+> **Added 2026-11-10 — one new file: run 45** (safe to re-run; needs 01 and 04): the **navbar sale
+> collection**. One collection at a time (11.11, then Black Friday, Cyber Monday…) gets an electric
+> item in the store's main menu; switching another one on takes the current one out. It creates two
+> empty collections once: **11.11** (in the navbar straight away) and **Black Friday** (hidden, ready
+> to switch on). Add their products in admin → Catalogue → Collections. Before 45 runs, the website
+> and admin simply show no navbar sale.
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -548,6 +555,17 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   as sold; re-saving an issued invoice keeps warranty dates; converted website quotation requests
   count as shop sales; staff section check on "back to draft"; stock hints for invoice staff.
 - **Check:** `SELECT proname FROM pg_proc WHERE proname IN ('admin_unlink_receipt', '_invoice_prepaid');`
+
+### 45 — Navbar sale collection · `45_navbar_collections.sql`
+- **Adds:** `collections.show_in_nav` — the one collection shown as the electric sale item in the
+  main menu (desktop header, phone header, phone menu) while it is also active. Switching another
+  one on takes the current one out in the same save (trigger `collections_20_nav_switch`, backed by
+  the unique index `collections_nav_one`). The navbar collection is left off `/collections`.
+  Creates, once, two empty collections: `11-11` "11.11" (active, in the navbar) and `black-friday`
+  "Black Friday" (hidden). A re-run never brings back a deleted one or undoes an edit.
+- **Switches on:** admin → Catalogue → Collections → the **Navbar sale** panel, the **Navbar**
+  switch on each row (asks first; can hide the sale that leaves) and **Navbar** in the editor.
+- **Check:** `SELECT id, title, is_active, show_in_nav FROM public.collections WHERE show_in_nav;`
 
 ---
 

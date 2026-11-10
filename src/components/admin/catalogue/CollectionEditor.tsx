@@ -18,10 +18,12 @@ import {
   Toggle,
   useConfirm,
 } from "@/components/admin/ui";
+import { ElectricNavLink } from "@/components/layout/ElectricNavLink";
 import {
   CATALOGUE_MIGRATION,
   COLLECTION_KINDS,
   COLLECTION_MEMBERS_WRITE,
+  COLLECTION_NAV_WRITE,
   COLLECTION_WRITE,
   collectionFormFromRow,
   collectionRow,
@@ -30,6 +32,7 @@ import {
   fetchProductsByIds,
   fetchTags,
   hasErrors,
+  NAV_COLLECTION_MIGRATION,
   slugify,
   validateCollectionForm,
   type AdminCollectionRow,
@@ -53,6 +56,10 @@ import { CharCount, Thumb, UploadWaitStatus, useUploadsBusy } from "./shared";
  * CRUD on `collections` (04); hand-picked members and their order go through
  * admin_set_collection_products (23) in one call; automatic members are maintained by the
  * database's triggers from the rules — this screen only shows the result after a save.
+ *
+ * Navbar (45): "Show in the navbar" makes this the store's electric sale item; the database takes
+ * the current one out in the same save. show_in_nav is only sent when the switch changed, so a
+ * stale editor never takes the navbar back from a collection switched on since it opened.
  */
 
 type Target = AdminCollectionRow | "new" | null;
@@ -66,6 +73,8 @@ export function CollectionEditor({
   onSaved,
   categories,
   brands,
+  navReady,
+  navCurrent,
 }: {
   target: Target;
   onClose: () => void;
@@ -73,6 +82,10 @@ export function CollectionEditor({
   onSaved: () => void;
   categories: CategoryOption[];
   brands: string[];
+  /** false while 45_navbar_collections.sql isn't applied (the Navbar switch is unavailable). */
+  navReady: boolean;
+  /** The collection in the navbar right now (the one this would replace). */
+  navCurrent: { id: string; title: string } | null;
 }) {
   const open = target !== null;
   const [source, setSource] = useState<Target>(null);
@@ -87,6 +100,10 @@ export function CollectionEditor({
   const [uploads, setUploads] = useState<string[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** show_in_nav as the database last had it for this collection (to send it only when changed). */
+  const [navBaseline, setNavBaseline] = useState(false);
+  /** When this goes into the navbar, also hide the sale it replaces (ticked by default). */
+  const [hideReplaced, setHideReplaced] = useState(true);
   const uploadsBusy = useUploadsBusy();
   const keyCounter = useRef(0);
   const [confirm, confirmElement] = useConfirm();
@@ -94,9 +111,11 @@ export function CollectionEditor({
 
   if (target !== source) {
     setSource(target);
-    const next = target === null ? null : target === "new" ? emptyCollectionForm() : collectionFormFromRow(target);
+    const next = target === null ? null : target === "new" ? emptyCollectionForm(navReady) : collectionFormFromRow(target);
     setForm(next);
     setSavedId(target && target !== "new" ? target.id : null);
+    setNavBaseline(next?.showInNav ?? false);
+    setHideReplaced(true);
     setRowBaseline(next ? JSON.stringify(collectionRow(next)) : "");
     setMembers([]);
     setMembersBaseline("[]");
@@ -148,7 +167,7 @@ export function CollectionEditor({
 
   const requestClose = async () => {
     if (saving) return;
-    const unsaved = form !== null && (savedId === null ? rowJson !== JSON.stringify(collectionRow(emptyCollectionForm())) || members.length > 0 : rowDirty || membersDirty);
+    const unsaved = form !== null && (savedId === null ? rowJson !== JSON.stringify(collectionRow(emptyCollectionForm(navReady))) || members.length > 0 : rowDirty || membersDirty);
     if (unsaved && !(await confirm({ title: "Discard unsaved changes?", tone: "danger", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
     dropUploads([]);
     onClose();
@@ -167,16 +186,23 @@ export function CollectionEditor({
     }
     setSaving(true);
     const row = collectionRow(form);
+    const baselineRow = JSON.stringify(row);
+    // The sale this save takes out of the navbar (45 does that in the same write), if any.
+    const replaced = rowDirty && form.showInNav && !navBaseline && navCurrent && navCurrent.id !== savedId ? navCurrent : null;
+    // An existing collection only sends the navbar switch when it changed (see the header note).
+    if (savedId !== null && form.showInNav === navBaseline) delete row.show_in_nav;
+    const writeOptions = "show_in_nav" in row ? COLLECTION_NAV_WRITE : COLLECTION_WRITE;
     let id = savedId;
     if (rowDirty) {
-      const result = savedId ? await updateRows("collections", row, { id: savedId }, COLLECTION_WRITE) : await insertRow("collections", row, COLLECTION_WRITE);
+      const result = savedId ? await updateRows("collections", row, { id: savedId }, writeOptions) : await insertRow("collections", row, writeOptions);
       if (!toastResult(result, { failure: "Couldn't save the collection" })) {
         setSaving(false);
         return;
       }
       id = row.id as string;
       setSavedId(id);
-      setRowBaseline(JSON.stringify(row));
+      setRowBaseline(baselineRow);
+      setNavBaseline(form.showInNav);
       setForm((current) => (current ? { ...current, originalId: id } : current));
       dropUploads([form.coverImage]);
       setUploads([]);
@@ -192,14 +218,36 @@ export function CollectionEditor({
       }
       setMembersBaseline(memberIds);
     }
+    let hidReplaced = false;
+    if (replaced && hideReplaced) {
+      const hidden = await updateRows("collections", { is_active: false }, { id: replaced.id }, { ...COLLECTION_WRITE, select: "id" });
+      if (hidden.ok) hidReplaced = true;
+      else adminToast.error(`${replaced.title} left the navbar but couldn't be hidden`, hidden.message);
+    }
     setSaving(false);
-    adminToast.success(savedId ? "Collection saved" : "Collection created");
+    const navNote = replaced
+      ? `It's in the navbar now, replacing ${replaced.title}${hidReplaced ? ", which is hidden now" : ""}.`
+      : rowDirty && form.showInNav && !navBaseline
+        ? "It's in the navbar now."
+        : rowDirty && !form.showInNav && navBaseline
+          ? "It's out of the navbar."
+          : undefined;
+    adminToast.success(savedId ? "Collection saved" : "Collection created", navNote);
     setShowErrors(false);
     onSaved();
     membersQuery.refetch(); // show the membership the database now holds (rules re-evaluated by its triggers)
   };
 
   const tileProducts = featureIds.map((pid) => tile.data?.find((p) => p.id === pid) ?? null);
+  const membersKnown = savedId === null || freshMembers !== null;
+  const noProducts = membersKnown && members.length === 0 && ruleMembers.length === 0;
+  const navHint = !form
+    ? null
+    : form.showInNav && navBaseline
+      ? "This is the navbar sale now. Switch it off to take it out of the navbar."
+      : navCurrent && navCurrent.id !== savedId
+        ? `Switching this on takes ${navCurrent.title} out of the navbar when you save (one at a time). It also switches Active on.`
+        : "Switching this on puts it in the navbar when you save. It also switches Active on.";
 
   return (
     <Drawer
@@ -208,7 +256,7 @@ export function CollectionEditor({
       width="xl"
       busy={saving}
       title={savedId ? `Edit ${form?.title || savedId}` : "New collection"}
-      description="Collections group products on their own page; featured ones appear as homepage tiles."
+      description="Collections group products on their own page; featured ones appear as homepage tiles, and the navbar one is the electric sale item in the main menu."
       footer={
         form && (
           <>
@@ -298,6 +346,57 @@ export function CollectionEditor({
               disabled={saving}
               onBusyChange={uploadsBusy.onBusy("cover")}
             />
+          </SectionCard>
+
+          <SectionCard
+            title="Navbar"
+            description="The sale in the store's main menu (11.11, Black Friday…): one collection at a time, with an electric effect, on every page. This switch shows it there only."
+          >
+            {!form.navReady ? (
+              <AdminNotice title="Needs the database update">
+                Run <span className="font-mono">{NAV_COLLECTION_MIGRATION}</span> in Supabase to use this.
+              </AdminNotice>
+            ) : (
+              <div className="grid gap-4">
+                <Toggle
+                  checked={form.showInNav}
+                  onChange={(showInNav) => update(showInNav ? { showInNav, isActive: true } : { showInNav })}
+                  label="Show in the navbar"
+                  description={navHint}
+                  disabled={saving}
+                />
+                {form.showInNav && !navBaseline && navCurrent && navCurrent.id !== savedId && (
+                  <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-5 text-adm-ink-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4 accent-adm-ink"
+                      checked={hideReplaced}
+                      disabled={saving}
+                      onChange={(event) => setHideReplaced(event.target.checked)}
+                    />
+                    <span>
+                      <span className="block font-semibold text-adm-ink">Also hide {navCurrent.title}</span>
+                      <span className="block text-xs text-adm-mute">For a sale that has ended: its page and its tile on the All collections page go away. You can switch it back on later.</span>
+                    </span>
+                  </label>
+                )}
+                {form.showInNav && (
+                  <div>
+                    <p className="font-mono text-[11px] font-semibold tracking-[0.06em] text-adm-ink-2 uppercase">Preview</p>
+                    <div className="bg-grid mt-2 inline-flex border border-adm-line bg-paper px-6 py-4 [--grid-size:12px]">
+                      <ElectricNavLink label={form.title.trim() || "Title"} className="h-9" />
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-adm-mute">The title is the menu label, so keep it short (11.11, Black Friday). Long titles are cut short.</p>
+                    {!form.isActive && (
+                      <AdminNotice className="mt-3">Active is off, so the navbar shows nothing until you switch it back on.</AdminNotice>
+                    )}
+                    {noProducts && (
+                      <AdminNotice className="mt-3">No products yet: add them under Products below, or shoppers who click it find an empty page.</AdminNotice>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </SectionCard>
 
           <SectionCard title="Homepage" description="Featured collections form the homepage row, as tiles with two product cut-outs.">

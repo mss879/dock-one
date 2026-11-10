@@ -4,15 +4,30 @@ import Link from "next/link";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { Sheet } from "@/components/ui/Sheet";
+import { ElectricNavLink } from "./ElectricNavLink";
 import type { NavLink } from "./nav";
 
-/** The phone-size menu. Items and contact come from the server header (active categories, store settings). */
-export function MobileMenu({ items, utility, hotline }: { items: NavLink[]; utility: NavLink[]; hotline: { display: string; href: string } | null }) {
+/**
+ * The phone-size menu. Items and contact come from the server header (active categories, store
+ * settings); `sale` is the navbar sale collection (11.11, Black Friday…), first, as an electric row.
+ */
+export function MobileMenu({
+  items,
+  sale = null,
+  utility,
+  hotline,
+}: {
+  items: NavLink[];
+  sale?: NavLink | null;
+  utility: NavLink[];
+  hotline: { display: string; href: string } | null;
+}) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
   return (
     <>
-      <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="-ml-2 grid size-11 place-items-center lg:hidden">
+      {/* while a sale item is shown the desktop nav starts at xl (Header), so the menu stays until then */}
+      <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className={`-ml-2 grid size-11 place-items-center ${sale ? "xl:hidden" : "lg:hidden"}`}>
         <Menu aria-hidden className="size-6" />
       </button>
       <Sheet open={open} onClose={close} side="left" label="Menu">
@@ -24,6 +39,11 @@ export function MobileMenu({ items, utility, hotline }: { items: NavLink[]; util
             </button>
           </div>
           <nav aria-label="Main" className="flex-1 overflow-y-auto">
+            {sale && (
+              <div className="h-16 border-b border-ink">
+                <ElectricNavLink href={sale.href} label={sale.label} variant="row" className="h-full" onNavigate={close} />
+              </div>
+            )}
             <ul>
               {items.map((item, i) => (
                 <li key={item.href} className="border-b border-line">

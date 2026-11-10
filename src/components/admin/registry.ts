@@ -192,7 +192,7 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     group: "Catalogue",
     icon: Layers,
     owner: "WP-K",
-    summary: "Curated collections with manual membership or automatic rules, featured on the homepage.",
+    summary: "Curated collections with manual membership or automatic rules, featured on the homepage — and the navbar sale (11.11, Black Friday…).",
     load: () => import("./tabs/CollectionsTab"),
   },
   {

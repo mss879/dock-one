@@ -9,7 +9,7 @@ import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { shareImages } from "@/components/seo/share-image";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
-import { collectionHref, findCollection, listProducts, type Collection } from "@/lib/catalogue";
+import { collectionHref, findCollection, getNavCollection, listProducts, type Collection } from "@/lib/catalogue";
 import { MAX_SHOP_PAGE, SHOP_PAGE_SIZE, SHOP_SORT_OPTIONS, type RawSearchParams, type ShopQuery, type ShopSort as ShopSortValue } from "@/lib/catalogue-queries";
 
 /*
@@ -55,7 +55,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   if (!collection) notFound();
 
   const { page, sort } = readPaging(await searchParams);
-  const list = await listProducts({ collectionId: collection.id, sort, page, pageSize: SHOP_PAGE_SIZE });
+  const [list, navCollection] = await Promise.all([listProducts({ collectionId: collection.id, sort, page, pageSize: SHOP_PAGE_SIZE }), getNavCollection()]);
+  // The navbar sale collection isn't listed on /collections, so its crumbs go straight home.
+  const inNavbar = navCollection?.id === collection.id;
   const pageCount = Math.max(1, Math.ceil(list.total / list.pageSize));
   const pathname = collectionHref(collection.id);
   const [back, front] = collection.featureProducts;
@@ -65,7 +67,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   return (
     <main id="main" className="shell pt-8 pb-24 lg:pt-12">
       <TrackEvent type="collection_view" metadata={{ collection: collection.id }} />
-      <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Collections", href: "/collections" }, { label: collection.title }]} />
+      <Breadcrumbs
+        items={inNavbar ? [{ label: "Home", href: "/" }, { label: collection.title }] : [{ label: "Home", href: "/" }, { label: "Collections", href: "/collections" }, { label: collection.title }]}
+      />
 
       <header className="relative mt-4 mb-10 grid overflow-hidden border border-ink bg-surface md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="relative z-10 flex flex-col justify-center p-6 sm:p-8 lg:p-10">
