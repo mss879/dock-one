@@ -2,7 +2,9 @@ import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { CACHE_TAGS, cached, DataReadError, readFailSoft, throwDbError } from "@/lib/cache";
 import { safeImageUrl, toStringArray, toText } from "@/lib/catalogue-shared";
+import { applyPageTokens, pageTokenValues, stripMarkdownEscapes } from "@/lib/page-tokens";
 import { logDbError } from "@/lib/rpc-errors";
+import { getStoreSettings } from "@/lib/settings";
 import { createServerSupabase, SupabaseNotConfiguredError } from "@/lib/supabase/server";
 import { BLOG_MAX_PAGE, BLOG_PAGE_SIZE, isCmsSlug, isFooterGroup, type FooterGroup } from "@/components/content/cms-shared";
 
@@ -206,6 +208,19 @@ async function readDefining<T>(scope: string, read: () => Promise<T | null>): Pr
 export function getPage(slug: string): Promise<CmsPage | null> {
   if (!isCmsSlug(slug)) return Promise.resolve(null);
   return readDefining("cms.getPage", () => readPage(slug));
+}
+
+/**
+ * The page as shoppers see it: `getPage` with its store-setting tokens ({delivery_fee},
+ * {returns_window_days}, {email}… — lib/page-tokens) filled in from the CURRENT settings. Filled
+ * here, outside the cached page read, so the page and the settings each refresh on their own tag.
+ */
+export async function getPageForDisplay(slug: string): Promise<CmsPage | null> {
+  const [page, settings] = await Promise.all([getPage(slug), getStoreSettings()]);
+  if (!page) return null;
+  const values = pageTokenValues(settings);
+  const summary = page.summary ? stripMarkdownEscapes(applyPageTokens(page.summary, values)).trim() : "";
+  return { ...page, content: applyPageTokens(page.content, values), summary: summary || null };
 }
 
 /** One PUBLISHED blog post by slug, or null. */

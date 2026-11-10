@@ -6,6 +6,7 @@ import { AdminButton, Field, Textarea } from "@/components/admin/ui";
 import { CMS_LIMITS } from "@/components/content/cms-shared";
 import { IMAGE_ACCEPT, uploadImage } from "@/lib/admin/storage";
 import { renderMarkdown } from "@/lib/markdown";
+import { applyPageTokens, PAGE_TOKENS, type PageTokenValues } from "@/lib/page-tokens";
 
 /**
  * The content editor: Markdown-lite in a textarea with a LIVE, SANITISED preview — the preview
@@ -62,6 +63,7 @@ export function MarkdownField({
   imagePrefix,
   onImageUploaded,
   onBusyChange,
+  tokens = null,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -73,6 +75,11 @@ export function MarkdownField({
   onImageUploaded?: (url: string) => void;
   /** true while an image upload is in flight (hold Save). */
   onBusyChange?: (busy: boolean) => void;
+  /**
+   * Pages only: the store-setting tokens ({delivery_fee}…, lib/page-tokens) with their current
+   * values — the preview fills them in as the storefront does, and the help lists them.
+   */
+  tokens?: PageTokenValues | null;
 }) {
   const [view, setView] = useState<"write" | "preview">("write");
   const [uploading, setUploading] = useState(false);
@@ -94,7 +101,7 @@ export function MarkdownField({
   useEffect(() => () => busyRef.current?.(false), []);
 
   const deferred = useDeferredValue(value);
-  const html = useMemo(() => renderMarkdown(deferred), [deferred]);
+  const html = useMemo(() => renderMarkdown(tokens ? applyPageTokens(deferred, tokens) : deferred), [deferred, tokens]);
   const ids = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const count = value.length;
 
@@ -226,6 +233,26 @@ export function MarkdownField({
           HTML also works, but only safe tags survive: scripts, styles, embedded frames, SVG, colours and classes are removed. Images must be on
           this site or uploaded here.
         </p>
+        {tokens && (
+          <>
+            <p className="mt-3 font-mono text-[11px] font-semibold tracking-[0.06em] text-adm-ink-2 uppercase">Store settings in the text</p>
+            <p className="mt-1 text-adm-mute">
+              Write these and the page shows the value from Settings, always up to date. A line whose setting is empty or switched off is left
+              out, so give such a fact its own line.
+            </p>
+            <dl className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-[minmax(0,18rem)_1fr]">
+              {PAGE_TOKENS.map((token) => (
+                <div key={token.name} className="contents">
+                  <dt className="font-mono text-[12.5px] text-adm-ink">{`{${token.name}}`}</dt>
+                  <dd className="text-adm-mute">
+                    {token.help}
+                    {tokens[token.name] === null && <span className="text-adm-ink"> — not set now, so its lines are hidden</span>}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        )}
       </details>
     </div>
   );

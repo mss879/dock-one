@@ -28,7 +28,7 @@ import { consumeParkedOfferCode, setQuoteDiscountCode, setQuoteFulfillment, useC
 import { useHydrated } from "@/components/cart/useHydrated";
 import { BankTransferDetails } from "@/components/order/BankTransferDetails";
 import { saveLastOrder, type LastOrderCopy } from "@/components/order/lastOrder";
-import { CheckoutSummary } from "./CheckoutSummary";
+import { CheckoutSummary, type CheckoutPolicies } from "./CheckoutSummary";
 
 /** The signed-in viewer's own customers row (read server-side with their session). */
 export type CheckoutPrefill = {
@@ -101,7 +101,16 @@ function StepHeader({ index, title, id }: { index: string; title: string; id: st
  * code, `begin_checkout`. Submits to POST /api/checkout; on success: clear the basket, keep a
  * sessionStorage copy, and go to /order/<id>?t=<view_token>.
  */
-export function CheckoutClient({ settings, prefill }: { settings: PublicStoreSettings; prefill: CheckoutPrefill | null }) {
+export function CheckoutClient({
+  settings,
+  prefill,
+  policies = null,
+}: {
+  settings: PublicStoreSettings;
+  prefill: CheckoutPrefill | null;
+  /** The published Terms and Refund policy pages, linked by the Place order button. */
+  policies?: CheckoutPolicies | null;
+}) {
   const router = useRouter();
   const hydrated = useHydrated();
   const { lines, subtotal: localSubtotal, delivery: localDelivery } = useCart();
@@ -577,6 +586,7 @@ export function CheckoutClient({ settings, prefill }: { settings: PublicStoreSet
           submitError={submitError}
           promoError={promoError}
           highlightVariantId={highlight}
+          policies={policies}
         />
       </div>
     </div>

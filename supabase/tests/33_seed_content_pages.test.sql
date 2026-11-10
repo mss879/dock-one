@@ -5,6 +5,13 @@
 -- for good.
 \ir _helpers.sql
 
+-- 47 (policy pages) runs later in the chain: it adds terms and returns and fills in this template's
+-- placeholders. Put the pages back to 33's own output first, so this file tests 33 alone
+-- (47_seed_policy_pages.test.sql tests 47 and what it does to this page).
+DELETE FROM public.cms_pages WHERE slug IN ('privacy', 'terms', 'returns');
+DELETE FROM public.app_config WHERE name = 'seed_33_content_pages';
+\ir ../migrations/33_seed_content_pages.sql
+
 -- ── 1. what the seed stored ──────────────────────────────────────────────────
 SELECT pg_temp.eq((SELECT count(*) FROM public.cms_pages WHERE slug = 'privacy'), 1::bigint, 'seed 33 stores the privacy page once');
 SELECT pg_temp.ok(

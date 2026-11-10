@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ContentPage } from "@/components/content/ContentPage";
 import { cmsPageMetadata } from "@/components/content/metadata";
-import { getPage } from "@/lib/cms";
+import { getPageForDisplay } from "@/lib/cms";
 
 /*
  * /privacy — the published CMS page `privacy` (blueprint §5 content + legal routes; §12.1.6
@@ -13,11 +13,11 @@ import { getPage } from "@/lib/cms";
 const SLUG = "privacy";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return cmsPageMetadata(await getPage(SLUG), "/privacy");
+  return cmsPageMetadata(await getPageForDisplay(SLUG), "/privacy");
 }
 
 export default async function PrivacyPage() {
-  const page = await getPage(SLUG);
+  const page = await getPageForDisplay(SLUG);
   if (!page) notFound();
   return <ContentPage page={page} />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, Save, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AdminButton,
   AdminNotice,
@@ -22,8 +22,10 @@ import {
   Toggle,
   useConfirm,
 } from "@/components/admin/ui";
+import { useStoreSettingsRow } from "@/components/admin/homepage/shared";
 import { CMS_LIMITS, FOOTER_GROUPS, isCmsRouteSlug, type FooterGroup } from "@/components/content/cms-shared";
 import { useAdminQuery } from "@/lib/admin/query";
+import { pageTokenValues } from "@/lib/page-tokens";
 import { removeImage } from "@/lib/admin/storage";
 import { adminToast, toastResult } from "@/lib/admin/toast";
 import { insertRow, updateRows } from "@/lib/admin/write";
@@ -93,6 +95,9 @@ export function ContentEditor({
     enabled: editingId !== null,
     migration: CONTENT_MIGRATION,
   });
+  // Pages can quote store settings ({delivery_fee}…): the preview fills them in with today's values.
+  const storeSettings = useStoreSettingsRow();
+  const tokens = useMemo(() => (kind === "pages" && storeSettings.data ? pageTokenValues(storeSettings.data.settings) : null), [kind, storeSettings.data]);
 
   const [form, setForm] = useState<ContentForm | null>(null);
   const [source, setSource] = useState<unknown>(null); // what the form was built from ("new" or a loaded row)
@@ -386,6 +391,7 @@ export function ContentEditor({
               imagePrefix={coverPrefix(form)}
               onImageUploaded={noteUpload}
               onBusyChange={uploads.onBusy("inline")}
+              tokens={tokens}
             />
           </SectionCard>
 

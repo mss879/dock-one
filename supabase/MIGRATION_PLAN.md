@@ -47,6 +47,13 @@ what to do right after, and how to check it worked.
 > them in admin → Catalogue → Collections → the collection → Products → "Variants". Before 46 runs,
 > the website and admin work as before (whole products), and the editor says to run 46.
 
+> **Added 2026-11-10 — one new file: run 47 AFTER the deploy** (safe to re-run; needs 15 and 33): the
+> **policy pages** the card gateway (WebXPay) asked for — **Terms & conditions** (`/terms`) and the
+> **Refund policy** (`/returns`), published and linked in the footer and under "Place order" — and
+> the privacy page's template placeholders filled in. Their store facts are Settings tokens the new
+> code fills in, so push the code first; run 47 before it is live and the pages show `{tokens}`
+> until it is. Read the three pages once (admin → Pages & blog) — see the commitments listed in 47.
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -590,6 +597,21 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   product with more than one variant ("All variants" / "Only sale-priced" / ticks). Adding a product
   whose variants are only partly sale-priced ticks just those.
 - **Check:** `SELECT collection_id, product_id, variant_ids FROM public.product_collections WHERE variant_ids IS NOT NULL;`
+
+### 47 — Policy pages · `47_seed_policy_pages.sql`
+- **Adds (content, once):** `cms_pages` **terms** "Terms & conditions" (footer: Legal) and
+  **returns** "Refund policy" (footer: Customer service), published — never over a page the owner
+  already wrote. Fills in seed 33's privacy template: business name, address and email become
+  tokens, the host is Netlify, order records are kept for accounts, tax and warranty claims, the
+  "any other service" line and the "Template" note go. Only the template's own placeholder text is
+  replaced.
+- **Tokens:** `{store_name}`, `{address}`, `{email}`, `{phone}`, `{whatsapp}`, `{business_reg_no}`,
+  `{opening_hours}`, `{payment_methods}`, `{cod_max_total}`, `{delivery_fee}`,
+  `{free_delivery_threshold}`, `{pickup_address}`, `{pickup_note}`, `{returns_window_days}`,
+  `{warranty_note}` — filled from `store_settings` when a page is shown (`lib/page-tokens.ts`); a
+  line whose setting is empty is left out. Any CMS page can use them.
+- **Order:** the code first (it fills the tokens), then 47.
+- **Check:** `SELECT slug, title, is_published, footer_group FROM public.cms_pages WHERE slug IN ('terms', 'returns', 'privacy');`
 
 ---
 

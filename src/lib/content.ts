@@ -287,11 +287,29 @@ const readSitePages = cached(
   { tags: [CACHE_TAGS.content] },
 );
 
+/** The store's policy pages that are published — linked from the footer and the checkout. */
+export type PolicyLinks = { terms: NavLink | null; refunds: NavLink | null; privacy: NavLink | null };
+
+/** Each policy route by its page's own title (the owner names it: "Refund policy", say), while published. */
+function policyLinks(pages: PageLink[]): PolicyLinks {
+  const link = (slug: "terms" | "returns" | "privacy", fallback: string): NavLink | null => {
+    const page = pages.find((candidate) => candidate.slug === slug);
+    return page ? { label: page.title || fallback, href: cmsPageHref(slug) } : null;
+  };
+  return { terms: link("terms", "Terms & conditions"), refunds: link("returns", "Returns & refunds"), privacy: link("privacy", "Privacy policy") };
+}
+
+/** The published policy pages (checkout links them by the Place order button). Never throws. */
+export async function getPolicyLinks(): Promise<PolicyLinks> {
+  const { pages } = await readFailSoft("content.getPolicyLinks", readSitePages, { pages: [] as PageLink[], posts: 0 });
+  return policyLinks(pages);
+}
+
 /**
  * The footer's link columns and the top bar's store locator. Fixed blueprint routes appear only when
  * their page exists: /track and /contact always; /returns, /terms, /privacy while their CMS page is
- * published; /blogs while at least one post is published. Other published pages flagged
- * show_in_footer join their footer_group column (by sort_order).
+ * published, labelled with the page's own title; /blogs while at least one post is published. Other
+ * published pages flagged show_in_footer join their footer_group column (by sort_order).
  */
 export async function getFooterLinks(): Promise<SiteLinks> {
   const { pages, posts } = await readFailSoft("content.getFooterLinks", readSitePages, { pages: [] as PageLink[], posts: 0 });
@@ -300,19 +318,16 @@ export async function getFooterLinks(): Promise<SiteLinks> {
     pages
       .filter((page) => page.showInFooter && page.group === group && !isCmsRouteSlug(page.slug))
       .map((page) => ({ label: page.title, href: cmsPageHref(page.slug) }));
+  const policy = policyLinks(pages);
 
   const customerService: NavLink[] = [
     { label: "Track order", href: "/track" },
-    ...(published.has("returns") ? [{ label: "Returns & refunds", href: cmsPageHref("returns") }] : []),
+    ...(policy.refunds ? [policy.refunds] : []),
     ...flagged("customer_service"),
     { label: "Contact us", href: "/contact" },
   ];
   const company: NavLink[] = [...flagged("company"), ...(posts > 0 ? [{ label: "Blog", href: BLOG_PATH }] : [])];
-  const legal: NavLink[] = [
-    ...(published.has("terms") ? [{ label: "Terms & conditions", href: cmsPageHref("terms") }] : []),
-    ...(published.has("privacy") ? [{ label: "Privacy policy", href: cmsPageHref("privacy") }] : []),
-    ...flagged("legal"),
-  ];
+  const legal: NavLink[] = [...(policy.terms ? [policy.terms] : []), ...(policy.privacy ? [policy.privacy] : []), ...flagged("legal")];
 
   return {
     columns: [

@@ -14,6 +14,9 @@ import { Price } from "@/components/ui/Price";
 import { PromoCodeField } from "@/components/cart/PromoCodeField";
 import type { CartQuote } from "@/components/cart/useCartQuote";
 
+/** The published policy pages, by their own titles (lib/content getPolicyLinks); null = not published. */
+export type CheckoutPolicies = { terms: { label: string; href: string } | null; refunds: { label: string; href: string } | null };
+
 type Props = {
   formId: string;
   lines: CartLine[];
@@ -26,6 +29,7 @@ type Props = {
   submitError: string | null;
   promoError: string | null;
   highlightVariantId: number | null;
+  policies?: CheckoutPolicies | null;
 };
 
 /**
@@ -34,7 +38,20 @@ type Props = {
  * charge. The Place order button submits the checkout form (form attribute), so the promo form
  * can live here without nesting forms.
  */
-export function CheckoutSummary({ formId, lines, localSubtotal, localDelivery, quote, fulfillment, submitting, canSubmit, submitError, promoError, highlightVariantId }: Props) {
+export function CheckoutSummary({
+  formId,
+  lines,
+  localSubtotal,
+  localDelivery,
+  quote,
+  fulfillment,
+  submitting,
+  canSubmit,
+  submitError,
+  promoError,
+  highlightVariantId,
+  policies = null,
+}: Props) {
   const { isBase } = useCurrency();
   const q = quote.quote;
   const subtotal = q ? q.subtotal : localSubtotal;
@@ -148,7 +165,28 @@ export function CheckoutSummary({ formId, lines, localSubtotal, localDelivery, q
         <Button type="submit" form={formId} size="lg" className="w-full" disabled={!canSubmit || submitting} aria-busy={submitting || undefined}>
           {submitting ? "Placing order…" : "Place order"}
         </Button>
+        <PolicyNote policies={policies} />
       </div>
     </aside>
+  );
+}
+
+/** "By placing your order you agree to our Terms & conditions and Refund policy." — published pages only. */
+function PolicyNote({ policies }: { policies: CheckoutPolicies | null }) {
+  const links = [policies?.terms, policies?.refunds].filter((link): link is { label: string; href: string } => Boolean(link));
+  if (links.length === 0) return null;
+  return (
+    <p className="mt-3 text-center font-sans text-xs leading-5 text-mute">
+      By placing your order you agree to our{" "}
+      {links.map((link, index) => (
+        <span key={link.href}>
+          {index > 0 && " and "}
+          <Link href={link.href} target="_blank" className="font-medium text-ink underline decoration-line underline-offset-2 hover:text-violet-ink hover:decoration-violet">
+            {link.label}
+          </Link>
+        </span>
+      ))}
+      .
+    </p>
   );
 }

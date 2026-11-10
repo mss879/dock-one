@@ -3,7 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { isCmsRouteSlug } from "@/components/content/cms-shared";
 import { ContentPage } from "@/components/content/ContentPage";
 import { cmsPageMetadata, notFoundMetadata } from "@/components/content/metadata";
-import { cmsPageHref, getPage } from "@/lib/cms";
+import { cmsPageHref, getPageForDisplay } from "@/lib/cms";
 
 /*
  * /pages/[slug] — any other CMS page the owner publishes (delivery, warranty, about …; BUILD_SPEC
@@ -22,13 +22,13 @@ export async function generateStaticParams(): Promise<{ slug: string }[]> {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   if (isCmsRouteSlug(slug)) return notFoundMetadata("Page moved");
-  return cmsPageMetadata(await getPage(slug), cmsPageHref(slug));
+  return cmsPageMetadata(await getPageForDisplay(slug), cmsPageHref(slug));
 }
 
 export default async function CmsPageRoute({ params }: Props) {
   const { slug } = await params;
   if (isCmsRouteSlug(slug)) permanentRedirect(cmsPageHref(slug));
-  const page = await getPage(slug);
+  const page = await getPageForDisplay(slug);
   if (!page) notFound();
   return <ContentPage page={page} />;
 }

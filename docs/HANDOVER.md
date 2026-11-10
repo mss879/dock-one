@@ -32,6 +32,7 @@ quotation requests) and how to use them in the admin.
 | Contact form, newsletter sign-up and unsubscribe | `/contact`, homepage, `/newsletter/unsubscribe` |
 | Abandoned-checkout reminders (3 emails) with restore and stop links | `/recover`, `/recover/stop` |
 | Content pages and blog | `/privacy`, `/terms`, `/returns`, `/pages/[slug]`, `/blogs`, `/blogs/[slug]` |
+| Policy pages for the card gateway — Terms & conditions, Refund policy (and the finished privacy page), quoting live Settings through tokens, linked in the footer and under "Place order" (47) | `/terms`, `/returns`, `/privacy`, `/checkout` |
 | Cookie consent (analytics only after "Allow"), display currencies (orders always in LKR) | banner, top bar |
 | Pre-launch lock — "launching soon" page with a preview PIN | `/launching-soon` |
 | SEO — sitemap, robots, manifest, metadata | `/sitemap.xml`, `/robots.txt` |
@@ -79,7 +80,11 @@ printed on the packing slip and invoices).
 
 Owner tips: publishing a page with the address (slug) `store-locator` in Pages & blog adds a
 "Store locator" link to the top bar and mobile menu; the privacy, terms and returns pages appear in
-their footer columns automatically once published; a page left unpublished is hidden everywhere.
+their footer columns automatically once published, under their own titles, and the terms and
+returns pages are also linked under "Place order" at checkout; a page left unpublished is hidden
+everywhere. Pages can quote store settings — `{delivery_fee}`, `{returns_window_days}`, `{email}`
+and the rest listed in the editor's "Formatting help" — which always show today's Settings values
+(lib/page-tokens.ts); a line whose setting is empty is left out.
 
 Local development: `npm install`, put the values in `.env.local`, `npm run dev`. The build refuses to
 run in production mode without the Supabase URL and anon key.
@@ -94,9 +99,15 @@ run in production mode without the Supabase URL and anon key.
 - **Domain** — `https://dockonesolutions.com` (the fallback when `NEXT_PUBLIC_SITE_URL` is unset; set it to the
   same value on the host so sitemap, canonical and share-image URLs all use it).
 - **OPENING10** (seed 32) — keep only if the offer is real.
-- **Privacy page** (seed 33) is a template: fill the `[BRACKETED]` placeholders, have it reviewed,
-  delete the "Template" note. Write and publish the terms and returns pages (not seeded — nothing
-  was invented).
+- **Policy pages** — `47_seed_policy_pages.sql` (2026-11-10, for the WebXPay card gateway) publishes
+  **Terms & conditions** (`/terms`) and the **Refund policy** (`/returns`) and fills in seed 33's
+  privacy template (its `[BRACKETED]` placeholders and "Template" note). Every store fact on them
+  is a Settings token, so they follow Settings by themselves. Read all three once: they state a
+  few commitments no setting holds (refunds sent within 7 working days, card refunds 7–14 working
+  days at the bank, free cancellation until dispatch, change-of-mind returns unused and complete
+  with return postage and the delivery fee not refunded, warranty exclusions). Edit them in
+  admin → Pages & blog. Deploy the token code before running 47, or the pages show `{tokens}`
+  until the deploy lands.
 - **Homepage copy** — the seeded lines are the approved design's copy. Price claims were corrected
   to match the demo catalogue ("from Rs. 329,900", "SSDs up to 21% off", "from Rs. 32,900",
   "from Rs. 9,900"); update them whenever real prices change. Review these lines too: "Limited time"
@@ -187,4 +198,14 @@ run in production mode without the Supabase URL and anon key.
   picked variant, price sorting, the product page opening on the sale variant (server-rendered) with
   the ⚡ sale note and its option shortcuts on desktop and at 375 px; and the site and admin with 46
   NOT applied (whole products, the "run 46" note, saves through 23's call).
+- **Policy pages (47, 2026-11-10):** `verify.sh` — 47 migration files applied twice, 48 test files,
+  2,178 checks (19 for 47: published in their columns, every store fact a token, the privacy
+  template filled without touching the rest, anon reads, idempotent, the owner's pages win; 33's
+  test now resets to 33's own output first). `next build` clean. Browser pass on a local Postgres +
+  PostgREST stack with the live Settings values: `/terms`, `/returns` and `/privacy` show Rs. 500,
+  Rs. 25,000, the 3-day window, phone / WhatsApp / email as links, the address and the payment
+  methods, with the unset registration-number, opening-hours, COD-limit and warranty-note lines
+  left out; the footer lists "Terms & conditions", "Refund policy" and "Privacy policy"; checkout
+  shows the agreement line under Place order; the admin editor's preview fills the tokens and its
+  help lists them (4 marked "not set now").
 - **Not verified here:** real Resend delivery.
