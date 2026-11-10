@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { discountPercent, productHref, type ProductCardData } from "@/lib/catalogue-shared";
+import { discountPercent, productCardHref, type ProductCardData } from "@/lib/catalogue-shared";
 import { Cross } from "@/components/ui/Cross";
 import { Price } from "@/components/ui/Price";
 import { AddToCartButton } from "./AddToCartButton";
@@ -9,7 +9,8 @@ import { WishlistButton } from "./WishlistButton";
 
 export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-width: 768px) 30vw, 46vw" }: { product: ProductCardData; sizes?: string }) {
   const off = discountPercent(product);
-  const href = productHref(product);
+  // A card for only some variants (a sale's pick) opens the product page on them.
+  const href = productCardHref(product);
   return (
     <article className="group relative flex h-full flex-col border border-line bg-surface transition-colors duration-150 hover:border-ink">
       <Cross className="-top-[6px] -left-[6px] text-ink opacity-0 transition-opacity group-hover:opacity-100" />
@@ -42,6 +43,12 @@ export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-
           </Link>
         </h3>
         {product.subtitle && <p className="label line-clamp-1 text-mute normal-case tracking-normal">{product.subtitle}</p>}
+        {product.optionNote && (
+          <p className="label line-clamp-1 normal-case tracking-normal">
+            <span className="text-mute">{product.variantCount > 1 ? "Options: " : "Option: "}</span>
+            <span className="font-semibold text-ink">{product.optionNote}</span>
+          </p>
+        )}
         <Rating value={product.ratingAvg} count={product.ratingCount} />
         <div className="mt-auto flex items-end justify-between gap-1 pt-2 sm:gap-2">
           <p className="font-mono leading-tight whitespace-nowrap tabular-nums">

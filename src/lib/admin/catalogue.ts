@@ -22,7 +22,7 @@ import {
   toText,
   type SpecValue,
 } from "@/lib/catalogue-shared";
-import { isSchemaMismatch, type ErrorTable } from "@/lib/rpc-errors";
+import { isMissingColumn, isSchemaMismatch, type ErrorTable } from "@/lib/rpc-errors";
 import { unwrapPage, unwrapRow, unwrapRows, type AdminPage } from "./query";
 import { orIlike } from "./search";
 
@@ -35,6 +35,7 @@ export const ADMIN_CATALOGUE_MIGRATION = "23_admin_catalogue.sql";
 export const SERIALS_MIGRATION = "25_serial_numbers.sql";
 /** collections.show_in_nav: the navbar sale collection (11.11, Black Friday…), one at a time. */
 export const NAV_COLLECTION_MIGRATION = "45_navbar_collections.sql";
+export const COLLECTION_VARIANTS_MIGRATION = "46_collection_variants.sql";
 /** Products, variants, categories and collections are cached under this tag (lib/cache.ts). */
 export const CATALOGUE_TAGS: CacheTag[] = ["catalogue"];
 
@@ -120,6 +121,7 @@ export const COLLECTION_ERRORS: ErrorTable = {
   collection_not_found: { status: 422, message: detail },
   invalid_products: { status: 422, message: detail },
   unknown_product: { status: 422, message: detail },
+  invalid_variants: { status: 422, message: detail },
   not_authorised: { status: 403, message: "Only an admin can do this. Sign in again as an admin." },
 };
 
@@ -145,6 +147,8 @@ export const COLLECTION_WRITE = {
 export const COLLECTION_MEMBERS_WRITE = { ...COLLECTION_WRITE, migration: ADMIN_CATALOGUE_MIGRATION };
 /** A collections write that sets show_in_nav: a missing column means 45 isn't applied yet. */
 export const COLLECTION_NAV_WRITE = { ...COLLECTION_WRITE, migration: NAV_COLLECTION_MIGRATION };
+/** admin_set_collection_members (46): members, their order and their variant picks in one call. */
+export const COLLECTION_VARIANTS_WRITE = { ...COLLECTION_WRITE, migration: COLLECTION_VARIANTS_MIGRATION };
 
 /** admin_set_product_serials (25) — business codes and the register's constraints → copy. */
 export const SERIALS_WRITE = {
@@ -384,13 +388,43 @@ export type ProductPick = {
   cutoutUrl: string | null;
   isActive: boolean;
   variantCount: number;
+  /** Every variant, active or not, in selector order — only when fetched `withVariants`. */
+  variants?: VariantPick[];
+};
+
+/** A variant as the collection editor's variant chooser lists it (admin RLS: switched-off ones too). */
+export type VariantPick = {
+  id: number;
+  name: string;
+  sku: string | null;
+  price: number;
+  compareAtPrice: number | null;
+  isActive: boolean;
 };
 
 const PICK_FIELDS = "id, slug, name, brand, category_id, image_url, cutout_url, is_active, variant_count";
+const PICK_VARIANT_FIELDS = "variants:product_variants(id, name, sku, price, compare_at_price, position, is_active)";
+
+function normalizeVariantPicks(value: unknown): VariantPick[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return (value as Row[])
+    .map((row) => ({ row, id: toNumber(row.id, 0), position: toNumber(row.position, 0) }))
+    .filter(({ id }) => Number.isInteger(id) && id > 0)
+    .sort((a, b) => a.position - b.position || a.id - b.id)
+    .map(({ row, id }) => ({
+      id,
+      name: toText(row.name, 120) ?? `#${id}`,
+      sku: toText(row.sku, 64),
+      price: toNumber(row.price, 0),
+      compareAtPrice: toNullableNumber(row.compare_at_price),
+      isActive: row.is_active !== false,
+    }));
+}
 
 export function normalizeProductPick(row: Row): ProductPick | null {
   const id = toNumber(row.id, 0);
   if (!Number.isInteger(id) || id <= 0) return null;
+  const variants = normalizeVariantPicks(row.variants);
   return {
     id,
     slug: String(row.slug ?? ""),
@@ -401,15 +435,16 @@ export function normalizeProductPick(row: Row): ProductPick | null {
     cutoutUrl: safeImageUrl(row.cutout_url),
     isActive: row.is_active !== false,
     variantCount: toNumber(row.variant_count, 0),
+    ...(variants ? { variants } : {}),
   };
 }
 
 /** Up to `limit` products matching a search (name, brand, slug), optionally in one category. */
 export async function searchProducts(
   supabase: SupabaseClient,
-  options: { search: string; categoryId?: string | null; limit?: number; signal?: AbortSignal },
+  options: { search: string; categoryId?: string | null; limit?: number; withVariants?: boolean; signal?: AbortSignal },
 ): Promise<ProductPick[]> {
-  let query = supabase.from("products").select(PICK_FIELDS);
+  let query = supabase.from("products").select(options.withVariants ? `${PICK_FIELDS}, ${PICK_VARIANT_FIELDS}` : PICK_FIELDS);
   const search = orIlike(["name", "brand", "slug"], options.search);
   if (search) query = query.or(search);
   if (options.categoryId) query = query.eq("category_id", options.categoryId);
@@ -1223,7 +1258,38 @@ export function ruleProblem(rule: RuleForm): string | null {
   return null;
 }
 
-export type MemberForm = { productId: number; product: ProductPick | null };
+/** A hand-picked member. `variantIds`: the variants it holds (46); null = the whole product. */
+export type MemberForm = { productId: number; product: ProductPick | null; variantIds: number[] | null };
+
+/** A variant shown at a reduced price: its compare-at (struck-through) price is above its price. */
+export const variantOnSale = (variant: { price: number; compareAtPrice: number | null }) =>
+  variant.compareAtPrice !== null && variant.compareAtPrice > variant.price;
+
+/**
+ * The pick a product starts with when it's added to a collection: when SOME of its active
+ * variants have a sale price and others don't, just those (a sale usually covers only some);
+ * otherwise the whole product (null). The editor shows the ticks, so it is easy to change.
+ */
+export function suggestedVariantPick(product: ProductPick): number[] | null {
+  const active = (product.variants ?? []).filter((variant) => variant.isActive);
+  const onSale = active.filter(variantOnSale);
+  return onSale.length > 0 && onSale.length < active.length ? onSale.map((variant) => variant.id) : null;
+}
+
+/** A pick as it is saved: sorted, only this product's variants, and null when it names them all. */
+export function normalizeVariantPick(ids: readonly number[] | null, variants: readonly VariantPick[] | undefined): number[] | null {
+  if (ids === null || !variants || variants.length === 0) return ids === null ? null : [...new Set(ids)].sort((a, b) => a - b);
+  const known = new Set(variants.map((variant) => variant.id));
+  const picked = [...new Set(ids)].filter((id) => known.has(id)).sort((a, b) => a - b);
+  return picked.length === 0 || picked.length === known.size ? null : picked;
+}
+
+/** admin_set_collection_members' p_variant_ids: {"<product id>": [variant ids]} for members with a pick. */
+export function memberVariantPicks(members: readonly MemberForm[]): Record<string, number[]> {
+  const picks: Record<string, number[]> = {};
+  for (const member of members) if (member.variantIds && member.variantIds.length > 0) picks[String(member.productId)] = member.variantIds;
+  return picks;
+}
 
 export type CollectionForm = {
   originalId: string | null;
@@ -1431,13 +1497,30 @@ export function collectionRow(form: CollectionForm): Row {
   };
 }
 
-export type CollectionMemberRow = { productId: number; position: number; source: "manual" | "rule"; product: ProductPick | null };
+export type CollectionMemberRow = {
+  productId: number;
+  position: number;
+  source: "manual" | "rule";
+  product: ProductPick | null;
+  /** The variants it holds (46); null = the whole product (and always null before 46). */
+  variantIds: number[] | null;
+};
 
-/** Members in the storefront's order (position, then product id) — up to 1,000. */
+function variantIdsFrom(value: unknown): number[] | null {
+  if (!Array.isArray(value)) return null;
+  const ids = value.map((id) => toNumber(id, 0)).filter((id) => Number.isInteger(id) && id > 0);
+  return ids.length > 0 ? ids : null;
+}
+
+/**
+ * Members in the storefront's order (position, then product id) — up to 1,000 — with every
+ * variant of each product (for the variant chooser). `*` reads variant_ids once 46 is applied
+ * and simply lacks it before, so this works either side of the migration.
+ */
 export async function fetchCollectionMembers(supabase: SupabaseClient, collectionId: string, signal?: AbortSignal): Promise<CollectionMemberRow[]> {
   let query = supabase
     .from("product_collections")
-    .select(`product_id, position, source, product:products(${PICK_FIELDS})`)
+    .select(`*, product:products(${PICK_FIELDS}, ${PICK_VARIANT_FIELDS})`)
     .eq("collection_id", collectionId)
     .order("position")
     .order("product_id")
@@ -1450,8 +1533,19 @@ export async function fetchCollectionMembers(supabase: SupabaseClient, collectio
       position: toNumber(row.position, 0),
       source: row.source === "rule" ? "rule" : "manual",
       product: product ? normalizeProductPick(product) : null,
+      variantIds: variantIdsFrom(row.variant_ids),
     };
   });
+}
+
+/** Whether 46 is applied (product_collections.variant_ids exists): false hides the variant chooser. */
+export async function fetchCollectionVariantsReady(supabase: SupabaseClient, signal?: AbortSignal): Promise<boolean> {
+  let query = supabase.from("product_collections").select("variant_ids").limit(1);
+  if (signal) query = query.abortSignal(signal);
+  const result = await query;
+  if (result.error && isMissingColumn(result.error)) return false;
+  unwrapRows<Row>(result, COLLECTION_VARIANTS_MIGRATION);
+  return true;
 }
 
 // ── Inventory (view admin_inventory, 23) ──────────────────────────────────────

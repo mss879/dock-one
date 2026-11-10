@@ -14,7 +14,17 @@ import { ProductJsonLd, type JsonLdAvailability } from "@/components/seo/Product
 import { shareImages } from "@/components/seo/share-image";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { categoryHref, fetchAvailability, findProductById, getRelatedProducts, productHref, toProductId, type ProductDetail } from "@/lib/catalogue";
+import {
+  categoryHref,
+  collectionHref,
+  fetchAvailability,
+  findProductById,
+  getProductSale,
+  getRelatedProducts,
+  productHref,
+  toProductId,
+  type ProductDetail,
+} from "@/lib/catalogue";
 import { pad2 } from "@/lib/format";
 import { getStoreSettings } from "@/lib/settings";
 
@@ -78,7 +88,19 @@ export default async function ProductPage({ params }: Params) {
   const product = await loadProduct(id);
   if (!product) notFound();
 
-  const [settings, related, availability] = await Promise.all([getStoreSettings(), getRelatedProducts(product, 4), offerAvailability(product)]);
+  const [settings, related, availability, sale] = await Promise.all([
+    getStoreSettings(),
+    getRelatedProducts(product, 4),
+    offerAvailability(product),
+    getProductSale(product.id),
+  ]);
+  // The navbar sale (45) and the variants of this product it holds (46: all, or a pick). The page
+  // opens on the cheapest of them, and the buying panel marks which options are in the sale.
+  const saleVariants = sale ? product.variants.filter((variant) => sale.variantIds === null || sale.variantIds.includes(variant.id)) : [];
+  const saleOffer =
+    sale && saleVariants.length > 0 ? { label: sale.title, href: collectionHref(sale.id), variantIds: sale.variantIds === null ? null : saleVariants.map((v) => v.id) } : null;
+  const initialVariantId =
+    saleOffer?.variantIds ? saleVariants.reduce((best, variant) => (variant.price < best.price ? variant : best)).id : product.defaultVariantId;
 
   const showSpecs = hasSpecContent(product.attributes);
   const paragraphs = product.description ? product.description.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) : [];
@@ -129,7 +151,7 @@ export default async function ProductPage({ params }: Params) {
           )}
 
           <div className="mt-6">
-            <ProductPurchase product={product} />
+            <ProductPurchase product={product} initialVariantId={initialVariantId} sale={saleOffer} />
             <ProductViewers productId={product.id} />
           </div>
           <ProductFacts settings={settings} warrantyMonths={product.warrantyMonths} />

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Check, ShoppingBasket } from "lucide-react";
 import { useState } from "react";
 import { cart, cartSnapshotFromCard } from "@/lib/cart";
-import { productHref, type ProductCardData } from "@/lib/catalogue-shared";
+import { productCardHref, type ProductCardData } from "@/lib/catalogue-shared";
 import { toast } from "@/lib/toast";
 
 type Props = {
@@ -32,14 +32,14 @@ export function AddToCartButton({ product, tone = "light", variant = "icon" }: P
     const label = `Choose options for ${product.name}`;
     if (variant === "full") {
       return (
-        <Link href={productHref(product)} aria-label={label} className={`label inline-flex h-11 items-center justify-center gap-2 px-4 font-semibold transition-colors duration-150 ${idle}`}>
+        <Link href={productCardHref(product)} aria-label={label} className={`label inline-flex h-11 items-center justify-center gap-2 px-4 font-semibold transition-colors duration-150 ${idle}`}>
           <ShoppingBasket aria-hidden className="size-4" />
           Choose options
         </Link>
       );
     }
     return (
-      <Link href={productHref(product)} aria-label={label} className={`grid size-10 shrink-0 place-items-center transition-colors duration-150 ${idle}`}>
+      <Link href={productCardHref(product)} aria-label={label} className={`grid size-10 shrink-0 place-items-center transition-colors duration-150 ${idle}`}>
         <ShoppingBasket aria-hidden className="size-[18px]" />
       </Link>
     );

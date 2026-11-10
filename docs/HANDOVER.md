@@ -20,6 +20,7 @@ quotation requests) and how to use them in the admin.
 | Request a quotation (product page or basket) → a numbered quotation to view / download as PDF, emailed | `/quote`, `/quotation/[id]` |
 | Collections | `/collections`, `/collection/[id]` |
 | Navbar sale — one collection at a time (11.11, Black Friday…) as an electric item in the main menu on every page (desktop header, phone header, phone menu), linking to its page; left off `/collections`. From 1024 to 1279 px wide, while a sale shows, the header keeps the tablet layout (menu button, sale item, full search) because the dropdown menu, the item and the search don't fit side by side (45) | header, `/collection/[id]` |
+| Variants in a collection — a hand-picked product can hold only some of its variants (the ones in a sale): the collection page shows just those (their price, discount, "Option(s): …"; a one-tap add adds that variant) and opens the product page on them; a product in the navbar sale opens on its sale variant and marks whether the shown option is in the sale (46) | `/collection/[id]`, `/product/[id]` |
 | Basket — server-priced totals, free-delivery bar, promo code, WhatsApp order link | `/cart` + the basket drawer |
 | Checkout — home delivery or showroom pickup, cash on delivery or bank transfer (each only while the store offers it), order note, promo code | `/checkout` |
 | Bank transfer — the store's account (Bank of Ceylon, Vishaka branch, Dock One Solutions Pvt Ltd, 79503030) shown as a card with copy buttons at checkout, and with the amount and the order number as reference on the order page, in the confirmation email, on tracking, in the customer's account and on the printed invoice — until the owner marks the order paid | `/checkout`, `/order/[id]`, `/track`, `/customer/dashboard` |
@@ -177,4 +178,13 @@ run in production mode without the Supabase URL and anon key.
   admin with 45 NOT applied (no navbar item, ordinary saves still work, "run 45" notes).
   **Not checked:** Safari's support for the crackle (the SMIL step of the noise seed) — without it the
   arcs stand still and the flicker and surges still run.
+- **Variants in a collection (46, 2026-11-10):** `verify.sh` — 46 migration files applied twice, 47
+  test files, 2,159 checks (47 for 46: picks and their checks, the new save call and 23's call keeping
+  picks, deleted / moved / switched-off variants, deleting a product that has picks, rule members,
+  RLS, staff Collections edit vs view, re-run). `next build` clean. Browser pass on a local Postgres +
+  PostgREST stack: adding a product ticks only its sale-priced variants; "Only sale-priced" on a saved
+  member; the collection cards (price, discount, "Options", `?variant=` links), a one-tap add of the
+  picked variant, price sorting, the product page opening on the sale variant (server-rendered) with
+  the ⚡ sale note and its option shortcuts on desktop and at 375 px; and the site and admin with 46
+  NOT applied (whole products, the "run 46" note, saves through 23's call).
 - **Not verified here:** real Resend delivery.

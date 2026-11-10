@@ -41,6 +41,12 @@ what to do right after, and how to check it worked.
 > to switch on). Add their products in admin → Catalogue → Collections. Before 45 runs, the website
 > and admin simply show no navbar sale.
 
+> **Added 2026-11-10 — one new file: run 46** (safe to re-run; needs 04, 23 and 39): **variants in a
+> collection**. A hand-picked product in a collection (the 11.11 sale, say) can hold only some of its
+> variants — the ones on sale. Every product already in a collection keeps all its variants. Pick
+> them in admin → Catalogue → Collections → the collection → Products → "Variants". Before 46 runs,
+> the website and admin work as before (whole products), and the editor says to run 46.
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -566,6 +572,24 @@ for the hero phone images, invoice payment types, expenses and the real contact 
 - **Switches on:** admin → Catalogue → Collections → the **Navbar sale** panel, the **Navbar**
   switch on each row (asks first; can hide the sale that leaves) and **Navbar** in the editor.
 - **Check:** `SELECT id, title, is_active, show_in_nav FROM public.collections WHERE show_in_nav;`
+
+### 46 — Variants in a collection · `46_collection_variants.sql`
+- **Adds:** `product_collections.variant_ids` — the variants a hand-picked member holds (NULL = the
+  whole product, which is what every existing member keeps). Checked on every write (trigger
+  `product_collections_10_variants`: the product's own variants, at least one, none for rule
+  members). A deleted picked variant drops out of the pick; when it was the only one, the product
+  leaves that collection (an automatic collection whose rules match takes it back whole). New
+  `admin_set_collection_members(collection, products, picks)` saves members, order and picks in one
+  call (staff with Collections → edit may use it); 23's `admin_set_collection_products` keeps working
+  and leaves picks alone.
+- **Storefront:** on the collection page a member with a pick shows only those variants (price,
+  discount, "Option(s): …", the variant a one-tap add uses) and links to the product page on them
+  (`?variant=`). The product page of a product in the navbar sale opens on its sale variant and
+  marks whether the shown option is in the sale.
+- **Switches on:** admin → Catalogue → Collections → a collection → Products → **Variants** on each
+  product with more than one variant ("All variants" / "Only sale-priced" / ticks). Adding a product
+  whose variants are only partly sale-priced ticks just those.
+- **Check:** `SELECT collection_id, product_id, variant_ids FROM public.product_collections WHERE variant_ids IS NOT NULL;`
 
 ---
 

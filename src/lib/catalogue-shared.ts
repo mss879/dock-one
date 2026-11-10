@@ -41,6 +41,14 @@ export type ProductCardData = {
   defaultVariantId: number | null;
   defaultVariantName: string | null;
   variantCount: number;
+  /**
+   * Only on a card that stands for SOME of the product's variants (a collection member with a
+   * variant pick, 46 — e.g. the ones in a sale): the variant its link opens on the product page,
+   * and the names of the variants it stands for. Price, discount, default and count above are
+   * then those variants' too.
+   */
+  linkVariantId?: number | null;
+  optionNote?: string | null;
 };
 
 export type ProductVariant = {
@@ -164,6 +172,9 @@ export function toProductId(value: unknown): number | null {
  * collection page is keyed by its slug id.
  */
 export const productHref = (product: number | { id: number }) => `/product/${typeof product === "number" ? product : product.id}`;
+/** A card's link: its product page — opening on the card's variant when it stands for only some (46). */
+export const productCardHref = (product: Pick<ProductCardData, "id" | "linkVariantId">) =>
+  product.linkVariantId ? `${productHref(product)}?variant=${product.linkVariantId}` : productHref(product);
 export const categoryHref = (id: string) => `/shop?category=${encodeURIComponent(id)}`;
 export const collectionHref = (id: string) => `/collection/${encodeURIComponent(id)}`;
 
@@ -320,6 +331,21 @@ export function normalizeProductCard(row: Row): ProductCardData | null {
     defaultVariantName: defaultVariant?.name ?? null,
     variantCount: variants.length,
   };
+}
+
+/**
+ * A card for a collection member that holds only some variants (46): built from just those (the
+ * cheapest picked one gives the price, discount and the variant a one-tap add uses), linking to
+ * the product page on it. null when none of the picked variants is on sale (switched off or
+ * gone) — the product then isn't shown in that collection at all, never with its other variants.
+ */
+export function normalizeProductCardPick(row: Row, variantIds: readonly number[]): ProductCardData | null {
+  const picked = new Set(variantIds);
+  const variants = Array.isArray(row.variants) ? (row.variants as unknown[]).filter((v) => Boolean(v) && typeof v === "object" && picked.has(toNumber((v as Row).id, 0))) : [];
+  const card = normalizeProductCard({ ...row, variants });
+  if (!card || card.variantCount === 0) return null;
+  const names = activeVariants(variants).map((variant) => variant.name);
+  return { ...card, linkVariantId: card.defaultVariantId, optionNote: names.join(" · ") };
 }
 
 function normalizeSpecs(value: unknown): Record<string, SpecValue> {

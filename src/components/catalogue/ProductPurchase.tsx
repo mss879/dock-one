@@ -1,7 +1,8 @@
 "use client";
 
-import { Minus, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Minus, Plus, Zap } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { Button } from "@/components/ui/Button";
 import { Price } from "@/components/ui/Price";
@@ -58,19 +59,51 @@ function stockOf(availability: Availability, variantId: number): VariantStock | 
 
 const DOT: Record<StockState, string> = { in: "bg-lime ring-1 ring-ink/30", low: "bg-lime ring-2 ring-ink", out: "bg-surface ring-1 ring-ink" };
 
-export function ProductPurchase({ product }: { product: ProductDetail }) {
+const subscribeToHistory = (onChange: () => void) => {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+};
+
+/** `?variant=<id>` in the page's URL — read on the client only, so the product page stays static (ISR). */
+function useLinkedVariantId(): number | null {
+  const search = useSyncExternalStore(
+    subscribeToHistory,
+    () => window.location.search,
+    () => "",
+  );
+  const id = Number(new URLSearchParams(search).get("variant"));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** The navbar sale this product is in (45/46): its name, page, and the variants it holds (null = all). */
+export type PurchaseSale = { label: string; href: string; variantIds: number[] | null };
+
+export function ProductPurchase({
+  product,
+  initialVariantId = null,
+  sale = null,
+}: {
+  product: ProductDetail;
+  /** The option the page opens on (the cheapest sale variant when only some are in the sale); default: the product's. */
+  initialVariantId?: number | null;
+  sale?: PurchaseSale | null;
+}) {
   const variants = product.variants;
   const availability = useAvailability(product.id);
   const axes = optionAxes(variants);
 
-  const initialId = variants.find((variant) => variant.id === product.defaultVariantId)?.id ?? variants[0]?.id ?? null;
+  const initialId = variants.find((variant) => variant.id === (initialVariantId ?? product.defaultVariantId))?.id ?? variants[0]?.id ?? null;
   const [chosenId, setChosenId] = useState<number | null>(initialId);
   const [touched, setTouched] = useState(false);
   const [qty, setQty] = useState(1);
+  // A link to one option (a sale card's ?variant=…) opens on it, until the shopper picks another.
+  const linkedId = useLinkedVariantId();
+  const linked = linkedId !== null && variants.some((variant) => variant.id === linkedId) ? linkedId : null;
 
   const isOut = (variant: ProductVariant) => stockOf(availability, variant.id)?.state === "out";
-  // Until the shopper picks something, never leave a sold-out default selected when another option can be bought.
-  const variant = effectiveVariant(variants, chosenId, touched, isOut);
+  // Until the shopper picks something, never leave a sold-out default selected when another option can be bought
+  // (an option they followed a link to stays, sold out or not: it's the one they came for).
+  const variant = effectiveVariant(variants, touched ? chosenId : (linked ?? chosenId), touched || linked !== null, isOut);
 
   const stock = variant ? stockOf(availability, variant.id) : null;
   const soldOut = stock?.state === "out";
@@ -106,6 +139,8 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
         )}
         {off > 0 && <span className="label bg-lime px-2 py-1 font-bold text-ink">-{off}%</span>}
       </div>
+
+      {sale && variant && <SaleNote sale={sale} variant={variant} variants={variants} onPick={choose} />}
 
       {/* availability (live) */}
       {variant && (
@@ -231,5 +266,44 @@ function OptionChoice({ name, label, checked, disabled, onSelect }: { name: stri
       {label}
       {disabled && <span className="sr-only"> (out of stock)</span>}
     </label>
+  );
+}
+
+/**
+ * The navbar sale on the product page: a static ⚡ chip (the arcs stay the navbar's own) linking to
+ * the sale, and whether the option shown is in it — when the sale holds only some options, the
+ * others name the ones that are, one tap away.
+ */
+function SaleNote({ sale, variant, variants, onPick }: { sale: PurchaseSale; variant: ProductVariant; variants: readonly ProductVariant[]; onPick: (id: number) => void }) {
+  const picked = sale.variantIds;
+  const inSale = picked === null || picked.includes(variant.id);
+  const others = picked === null ? [] : variants.filter((candidate) => picked.includes(candidate.id));
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-2.5 gap-y-2 text-sm">
+      <Link
+        href={sale.href}
+        className="label clip-chamfer inline-flex min-h-8 max-w-[22ch] items-center gap-1.5 bg-ink px-2.5 font-bold tracking-[0.1em] text-lime transition-colors duration-150 [--chamfer:7px] hover:bg-lime hover:text-ink"
+      >
+        <Zap aria-hidden className="size-3.5 shrink-0 fill-current" />
+        <span className="truncate">{sale.label}</span>
+      </Link>
+      {inSale ? (
+        <span className="font-medium">{picked !== null && variants.length > 1 ? "This option is in the sale" : "In the sale"}</span>
+      ) : (
+        <>
+          <span className="text-ink-2">In the sale:</span>
+          {others.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onPick(option.id)}
+              className="label min-h-8 border border-ink px-2.5 font-semibold transition-colors duration-150 hover:bg-ink hover:text-paper"
+            >
+              {option.name}
+            </button>
+          ))}
+        </>
+      )}
+    </div>
   );
 }

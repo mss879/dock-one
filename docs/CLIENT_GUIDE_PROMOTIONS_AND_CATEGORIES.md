@@ -249,7 +249,7 @@ One collection at a time can sit in the store's main menu as a glowing, electric
 
 Two collections are ready for you: **11.11** (already in the navbar) and **Black Friday** (hidden, waiting). Both start with no products.
 
-**Add the products.** Go to Catalogue → **Collections**, click **11.11**, and under **Products** add the products by hand (**Hand-picked**) or let rules choose them (**Automatic**). Click **Save collection**. Set the sale prices on the products themselves (**Price** and **Compare-at price**, see 3, Step 3).
+**Add the products.** Go to Catalogue → **Collections**, click **11.11**, and under **Products** add the products by hand (**Hand-picked**) or let rules choose them (**Automatic**). Click **Save collection**. Set the sale prices on the products themselves (**Price** and **Compare-at price**, see 3, Step 3). If only some versions of a product are on sale, see 4.4.2.
 
 **Switch to Black Friday.** On the Collections list, turn on the **Navbar** switch on the **Black Friday** row and confirm. Black Friday takes the place of 11.11 straight away.
 
@@ -261,6 +261,26 @@ You can also do this inside a collection: **Navbar** → **Show in the navbar**,
 **Where to check it:** the **Navbar sale** panel at the top of the Collections list shows what is in the navbar now and warns you when it has no products yet or is hidden. **Take it out** removes it (the menu then shows no sale).
 
 **For a new sale** (Cyber Monday, Christmas…): click **New collection**, give it a short title, add the products, switch **Show in the navbar** on and save.
+
+### 4.4.2 Only some variants on sale
+
+Sometimes only some versions of a product are in the sale: one colour of a mouse, or one size of a flash drive. You can choose which variants a collection holds.
+
+1. Set the sale price on the variants that are on sale: Catalogue → **Products** → the product → its variants, **Price** and **Compare-at price**.
+2. Open the collection (for example **11.11**) and add the product under **Products**. When only some of its variants have a sale price, just those are ticked for you, and the variant list opens so you can check it.
+3. To change the choice, click **Variants** under the product:
+   - **All variants**: the whole product, including variants you add to it later.
+   - **Only sale-priced**: just the variants with a sale price (shown when some, but not all, have one).
+   - Or tick and untick variants one by one. One variant always stays ticked; to take the product out, remove it with **×**.
+4. Click **Save collection**.
+
+**What shoppers see:** on the collection's page the product shows only the ticked variants: their price and discount, with "Option: …" (or "Options: …") under the name. The basket button adds that variant, or opens the product page on it when several are ticked. On the product page of a product in the navbar sale, a ⚡ tag with the sale's name shows when the chosen option is in the sale; when it isn't, the options that are sit next to it, one tap away.
+
+**Good to know:**
+
+- A product that rules add (**Automatic**) always comes with all its variants. To choose its variants, add it by hand.
+- A ticked variant that is switched off doesn't show. If none of the ticked variants is switched on, the product doesn't show in that collection, and the editor warns you.
+- Deleting a ticked variant takes it out of the collection. If it was the only ticked one, the product leaves the collection too.
 
 ### 4.5 New arrivals
 
@@ -369,5 +389,6 @@ Use **Delete** on the category's row. The database refuses to delete a category 
 - Automatic sale prices. Set **Price** and **Compare-at price** on each product by hand, and put them back afterwards.
 - Schedules for promo tiles (hero slides **can** be scheduled).
 - More than one sale in the navbar at once, or switching the navbar sale on a timer (switch it by hand, see 4.4.1).
+- Choosing variants for products that rules add to a collection (add the product by hand instead, see 4.4.2).
 - Moving a category into a different header menu group (needs a developer, see 5.5).
 - Changing the pose (size and tilt) of a category's cut-out on its card.

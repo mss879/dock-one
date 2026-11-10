@@ -12,6 +12,7 @@ import {
   normalizeNavCollection,
   normalizeProductArt,
   normalizeProductCard,
+  normalizeProductCardPick,
   normalizeProductDetail,
   toNumber,
   toProductId,
@@ -229,12 +230,20 @@ const readProductList = cached(
     const empty: ProductList = { items: [], total: 0, page: f.page, pageSize: f.pageSize };
     const sb = db();
 
-    // Collection membership: ids in the collection's own order (manual position, then rule members).
+    // Collection membership: ids in the collection's own order (manual position, then rule members),
+    // and each member's variant pick (46: variant_ids; `*` reads it once 46 is applied, and the
+    // list works the same without it — every member is then the whole product).
     let memberRank: Map<number, number> | null = null;
+    const picks = new Map<number, number[]>();
     if (f.collectionId) {
-      const { data, error } = await sb.from("product_collections").select("product_id, position").eq("collection_id", f.collectionId).order("position").order("product_id").limit(1000);
+      const { data, error } = await sb.from("product_collections").select("*").eq("collection_id", f.collectionId).order("position").order("product_id").limit(1000);
       if (error) throwDbError("catalogue.listProducts", error, MIGRATION);
-      memberRank = new Map(rowsOf(data).map((row, i) => [toNumber(row.product_id, 0), i]));
+      const members = rowsOf(data);
+      memberRank = new Map(members.map((row, i) => [toNumber(row.product_id, 0), i]));
+      for (const row of members) {
+        const variantIds = Array.isArray(row.variant_ids) ? row.variant_ids.map((id) => toNumber(id, 0)).filter((id) => id > 0) : [];
+        if (variantIds.length > 0) picks.set(toNumber(row.product_id, 0), variantIds);
+      }
       if (memberRank.size === 0) return empty;
     }
 
@@ -242,8 +251,10 @@ const readProductList = cached(
     if (memberRank) ids = ids ? ids.filter((id) => memberRank.has(id)) : [...memberRank.keys()];
     if (ids && ids.length === 0) return empty;
 
-    // "featured" inside a collection = the collection's order, paginated here (≤ 1000 members).
-    const paginateInMemory = Boolean(memberRank) && f.sort === "featured";
+    // Inside a collection (≤ 1000 members) every sort is paginated here: "featured" is the
+    // collection's own order, and a member with a variant pick is priced by the picked variants,
+    // which the products row (priced by ALL its variants) can't sort by.
+    const paginateInMemory = Boolean(memberRank);
     const from = (f.page - 1) * f.pageSize;
     const to = from + f.pageSize - 1;
 
@@ -292,18 +303,24 @@ const readProductList = cached(
     }
 
     let items = rowsOf(data)
-      .map(normalizeProductCard)
+      .map((row) => {
+        const pick = picks.get(toNumber(row.id, 0));
+        return pick ? normalizeProductCardPick(row, pick) : normalizeProductCard(row);
+      })
       .filter((p): p is ProductCardData => p !== null && p.variantCount > 0);
     let total = count ?? items.length;
     if (paginateInMemory && memberRank) {
       const rank = memberRank;
-      items.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+      if (f.sort === "featured") items.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+      // Same order as the database's price sorts, by the price each card shows.
+      else if (f.sort === "price_asc" && picks.size > 0) items.sort((a, b) => a.price - b.price || a.id - b.id);
+      else if (f.sort === "price_desc" && picks.size > 0) items.sort((a, b) => b.price - a.price || b.id - a.id);
       total = items.length;
       items = items.slice(from, to + 1);
     }
     return { items, total, page: f.page, pageSize: f.pageSize };
   },
-  ["catalogue:list:v2"],
+  ["catalogue:list:v3"],
   TAGS,
 );
 
@@ -421,6 +438,31 @@ const readNavCollection = cached(
 /** The navbar's sale collection (11.11, Black Friday…): switched on and active, or null. Fails soft → null. */
 export function getNavCollection(): Promise<NavCollection | null> {
   return readFailSoft("catalogue.getNavCollection", () => readNavCollection(), null);
+}
+
+/** The navbar sale a product is in (product page): the sale and the variants it holds (null = all). */
+export type ProductSale = { id: string; title: string; variantIds: number[] | null };
+
+const readSaleMembership = cached(
+  async (collectionId: string, productId: number): Promise<{ variantIds: number[] | null } | null> => {
+    // `*`: variant_ids once 46 is applied; before it every member is the whole product.
+    const { data, error } = await db().from("product_collections").select("*").eq("collection_id", collectionId).eq("product_id", productId).maybeSingle();
+    if (error) throwDbError("catalogue.getProductSale", error, MIGRATION);
+    const row = rowOf(data);
+    if (!row) return null;
+    const variantIds = Array.isArray(row.variant_ids) ? row.variant_ids.map((id) => toNumber(id, 0)).filter((id) => id > 0) : [];
+    return { variantIds: variantIds.length > 0 ? variantIds : null };
+  },
+  ["catalogue:sale-membership:v1"],
+  TAGS,
+);
+
+/** null when there's no navbar sale or the product isn't in it. Never throws. */
+export async function getProductSale(productId: number): Promise<ProductSale | null> {
+  const sale = await getNavCollection();
+  if (!sale) return null;
+  const membership = await readFailSoft("catalogue.getProductSale", () => readSaleMembership(sale.id, productId), null);
+  return membership ? { id: sale.id, title: sale.title, variantIds: membership.variantIds } : null;
 }
 
 /** One active collection by slug, or null. Its products: `listProducts({ collectionId: slug })`. */

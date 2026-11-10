@@ -21,6 +21,7 @@ export function ProductPicker({
   actionLabel = "Add",
   limit = 8,
   disabled = false,
+  withVariants = false,
 }: {
   /** Accessible name of the search box ("Find a product to add"). */
   label: string;
@@ -33,11 +34,13 @@ export function ProductPicker({
   actionLabel?: string;
   limit?: number;
   disabled?: boolean;
+  /** Also fetch every variant (the collection editor's variant chooser) and say how many there are. */
+  withVariants?: boolean;
 }) {
   const [term, setTerm] = useState("");
   const results = useAdminQuery(
-    ({ supabase, signal }) => searchProducts(supabase, { search: term, categoryId, limit: limit + excludeIds.length, signal }),
-    ["product-picker", term, categoryId, limit + excludeIds.length],
+    ({ supabase, signal }) => searchProducts(supabase, { search: term, categoryId, limit: limit + excludeIds.length, withVariants, signal }),
+    ["product-picker", term, categoryId, limit + excludeIds.length, withVariants],
     { migration: CATALOGUE_MIGRATION },
   );
   const rows = (results.data ?? []).filter((p) => !excludeIds.includes(p.id)).slice(0, limit);
@@ -54,6 +57,7 @@ export function ProductPicker({
               <span className="block truncate text-[13.5px] font-semibold text-adm-ink">{product.name}</span>
               <span className="flex flex-wrap items-center gap-1.5 text-xs text-adm-mute">
                 <span className="truncate">{product.brand}</span>
+                {product.variants && product.variants.length > 1 && <span>· {product.variants.length} variants</span>}
                 {!product.isActive && <StatusBadge tone="neutral">Inactive</StatusBadge>}
                 {product.isActive && product.variantCount === 0 && <StatusBadge tone="warning">No active variant</StatusBadge>}
                 {preview === "cutout" && !product.cutoutUrl && <span>· no cut-out yet</span>}

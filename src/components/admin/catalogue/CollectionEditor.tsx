@@ -24,14 +24,18 @@ import {
   COLLECTION_KINDS,
   COLLECTION_MEMBERS_WRITE,
   COLLECTION_NAV_WRITE,
+  COLLECTION_VARIANTS_MIGRATION,
+  COLLECTION_VARIANTS_WRITE,
   COLLECTION_WRITE,
   collectionFormFromRow,
   collectionRow,
   emptyCollectionForm,
   fetchCollectionMembers,
+  fetchCollectionVariantsReady,
   fetchProductsByIds,
   fetchTags,
   hasErrors,
+  memberVariantPicks,
   NAV_COLLECTION_MIGRATION,
   slugify,
   validateCollectionForm,
@@ -60,10 +64,17 @@ import { CharCount, Thumb, UploadWaitStatus, useUploadsBusy } from "./shared";
  * Navbar (45): "Show in the navbar" makes this the store's electric sale item; the database takes
  * the current one out in the same save. show_in_nav is only sent when the switch changed, so a
  * stale editor never takes the navbar back from a collection switched on since it opened.
+ *
+ * Variants (46): each hand-picked member can hold only some of its variants. Once 46 is applied
+ * members and picks are saved together by admin_set_collection_members; before it, the variant
+ * chooser is hidden and admin_set_collection_products saves members as whole products.
  */
 
 type Target = AdminCollectionRow | "new" | null;
 type MembersLoad = { collectionId: string; rows: CollectionMemberRow[] };
+
+/** What a members save would write: the order and each member's pick (dirty check / baseline). */
+const membersKey = (members: readonly MemberForm[]) => JSON.stringify(members.map((m) => [m.productId, m.variantIds]));
 
 const TILE_SLOTS = ["Back", "Front"] as const;
 
@@ -134,11 +145,19 @@ export function CollectionEditor({
   const freshMembers = membersQuery.data && membersQuery.data.collectionId === savedId ? membersQuery.data : null;
   if (freshMembers && freshMembers !== membersSource) {
     setMembersSource(freshMembers);
-    const manual = freshMembers.rows.filter((row) => row.source === "manual").map((row) => ({ productId: row.productId, product: row.product }));
+    const manual = freshMembers.rows
+      .filter((row) => row.source === "manual")
+      .map((row) => ({ productId: row.productId, product: row.product, variantIds: row.variantIds }));
     setMembers(manual);
-    setMembersBaseline(JSON.stringify(manual.map((m) => m.productId)));
+    setMembersBaseline(membersKey(manual));
   }
   const ruleMembers = freshMembers?.rows.filter((row) => row.source === "rule") ?? [];
+  // 46 applied? Until it is, members are whole products and the variant chooser stays hidden.
+  const variantsProbe = useAdminQuery(({ supabase, signal }) => fetchCollectionVariantsReady(supabase, signal), ["collection-variants-ready"], {
+    enabled: open,
+    migration: COLLECTION_VARIANTS_MIGRATION,
+  });
+  const variantsReady = variantsProbe.data === true;
 
   const tags = useAdminQuery(({ supabase, signal }) => fetchTags(supabase, signal), ["catalogue-tags"], { enabled: open, migration: CATALOGUE_MIGRATION });
   const featureIds = form?.featureProductIds ?? [];
@@ -149,7 +168,7 @@ export function CollectionEditor({
 
   const errors = form ? validateCollectionForm(form) : {};
   const rowJson = form ? JSON.stringify(collectionRow(form)) : "";
-  const memberIds = JSON.stringify(members.map((m) => m.productId));
+  const memberIds = membersKey(members);
   const rowDirty = form ? savedId === null || rowJson !== rowBaseline : false;
   const membersDirty = memberIds !== membersBaseline;
   const dirty = form ? (savedId === null ? true : rowDirty || membersDirty) : false;
@@ -209,7 +228,15 @@ export function CollectionEditor({
       setInitialCover(form.coverImage);
     }
     if (membersDirty && id) {
-      const result = await adminRpc("admin_set_collection_products", { p_collection_id: id, p_product_ids: members.map((m) => m.productId) }, COLLECTION_MEMBERS_WRITE);
+      const productIds = members.map((m) => m.productId);
+      // Before 46 there are no picks to send, and the older call keeps any the database has.
+      const result = variantsReady
+        ? await adminRpc(
+            "admin_set_collection_members",
+            { p_collection_id: id, p_product_ids: productIds, p_variant_ids: memberVariantPicks(members) },
+            COLLECTION_VARIANTS_WRITE,
+          )
+        : await adminRpc("admin_set_collection_products", { p_collection_id: id, p_product_ids: productIds }, COLLECTION_MEMBERS_WRITE);
       if (!result.ok) {
         setSaving(false);
         adminToast.error(rowDirty ? "Collection saved, but its products weren't updated" : "Couldn't update the collection's products", result.message);
@@ -518,14 +545,23 @@ export function CollectionEditor({
               {form.type === "automated" ? "Also include (hand-picked)" : "Hand-picked products"}
             </p>
             {membersQuery.error && <QueryError error={membersQuery.error} onRetry={membersQuery.refetch} feature="Collection products" className="mb-3" />}
-            <MembersEditor members={members} onChange={setMembers} disabled={saving || (savedId !== null && !freshMembers)} />
+            {variantsProbe.data === false && (
+              <AdminNotice className="mb-3" title="Choosing variants needs a database update">
+                To put only some variants of a product in this collection (for example, only the ones on sale), run{" "}
+                <code className="font-mono text-xs">{COLLECTION_VARIANTS_MIGRATION}</code> in Supabase. Until then each product comes in whole.
+              </AdminNotice>
+            )}
+            <MembersEditor members={members} onChange={setMembers} disabled={saving || (savedId !== null && !freshMembers)} variantsReady={variantsReady} />
 
             {savedId !== null && (form.type === "automated" || ruleMembers.length > 0) && (
               <div className="mt-5">
                 <p className="font-mono text-[11px] font-semibold tracking-[0.06em] text-adm-ink-2 uppercase">
                   Matched by the rules{freshMembers ? ` (${ruleMembers.length})` : ""}
                 </p>
-                <p className="text-xs leading-5 text-adm-mute">As saved — the database updates this list; it isn&apos;t edited here.</p>
+                <p className="text-xs leading-5 text-adm-mute">
+                  As saved — the database updates this list; it isn&apos;t edited here. Products matched by rules come with every variant; to choose
+                  variants, hand-pick the product above.
+                </p>
                 {ruleMembers.length > 0 ? (
                   <ul className="mt-2 grid max-h-72 gap-1 overflow-y-auto border border-adm-line p-2 sm:grid-cols-2">
                     {ruleMembers.map((row) => (

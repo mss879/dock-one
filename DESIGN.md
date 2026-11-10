@@ -111,7 +111,10 @@ tube and the arcs surge (CSS opacity loops in `globals.css`). Hover inverts the 
 is the one place that animates an SVG filter and glows — reserved for this item. Reduced motion: the
 arcs stay still and the loops stop. Placement: end of the desktop nav; before the search on tablets
 (and from 1024 to 1279 px, where the dropdown nav, the item and the search don't fit side by side);
-beside the search on phones; first row of the phone menu (arcs drawn inside the row).
+beside the search on phones; first row of the phone menu (arcs drawn inside the row). On the product
+page of a product in that sale, a static ink chamfer chip (lime bolt + the sale's title, no arcs)
+links to the sale and says whether the option shown is in it. When the sale holds only some options
+(46) and another one is shown, the chip is followed by the sale's options as outlined buttons.
 
 **Homepage preloader — "Docking"** (`src/components/preloader`): ~3 s, homepage only, once per browser
 session, skipped under reduced motion. On a night grid the DO monogram's D, O and lens fly in and dock
