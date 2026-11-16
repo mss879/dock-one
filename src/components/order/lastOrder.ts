@@ -18,7 +18,7 @@ export type LastOrderCopy = {
   createdAt: string | null;
   firstName: string | null;
   fulfillment: "delivery" | "pickup";
-  paymentMethod: "cod" | "bank_transfer" | null;
+  paymentMethod: "cod" | "bank_transfer" | "card" | null;
   subtotal: number;
   shippingFee: number;
   discountCode: string | null;
@@ -56,7 +56,7 @@ function read(): LastOrderCopy | null {
         createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : null,
         firstName: typeof parsed.firstName === "string" ? parsed.firstName.slice(0, 60) : null,
         fulfillment: parsed.fulfillment === "pickup" ? "pickup" : "delivery",
-        paymentMethod: parsed.paymentMethod === "cod" || parsed.paymentMethod === "bank_transfer" ? parsed.paymentMethod : null,
+        paymentMethod: parsed.paymentMethod === "cod" || parsed.paymentMethod === "bank_transfer" || parsed.paymentMethod === "card" ? parsed.paymentMethod : null,
         subtotal: Number(parsed.subtotal) || 0,
         shippingFee: Number(parsed.shippingFee) || 0,
         discountCode: typeof parsed.discountCode === "string" ? parsed.discountCode : null,

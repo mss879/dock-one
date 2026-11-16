@@ -139,6 +139,7 @@ export function isPaymentStatus(value: unknown): value is PaymentStatus {
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cod: "Cash on delivery",
   bank_transfer: "Bank transfer",
+  card: "Card payment",
 };
 
 export function paymentMethodLabel(method: unknown): string {
@@ -148,6 +149,7 @@ export function paymentMethodLabel(method: unknown): string {
 const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   pending_collection: "Pay on delivery",
   awaiting_transfer: "Awaiting transfer",
+  awaiting_payment: "Awaiting payment",
   paid: "Paid",
   refunded: "Refunded",
   void: "No payment due",
@@ -165,13 +167,13 @@ export function paymentStatusLabel(status: unknown, fulfillment: unknown = "deli
 
 /** Money is still owed on the order (what the out-for-delivery email calls "amount due"). */
 export function isPaymentDue(status: unknown): boolean {
-  return status === "pending_collection" || status === "awaiting_transfer";
+  return status === "pending_collection" || status === "awaiting_transfer" || status === "awaiting_payment";
 }
 
 /** What admin_set_payment_status allows from `current` (void only once the order is cancelled). */
 export function allowedPaymentTargets(current: unknown, orderStatus: unknown): ("paid" | "refunded" | "void")[] {
   const targets: ("paid" | "refunded" | "void")[] = [];
-  if (current === "pending_collection" || current === "awaiting_transfer") targets.push("paid");
+  if (current === "pending_collection" || current === "awaiting_transfer" || current === "awaiting_payment") targets.push("paid");
   if (current === "paid") targets.push("refunded");
   if (current !== "void" && isCancelledOrder(orderStatus)) targets.push("void");
   return targets;
@@ -200,6 +202,7 @@ export function orderStatusTone(status: unknown): OrderTone {
 const PAYMENT_TONES: Record<PaymentStatus, OrderTone> = {
   pending_collection: "warning",
   awaiting_transfer: "warning",
+  awaiting_payment: "warning",
   paid: "success",
   refunded: "neutral",
   void: "neutral",
@@ -268,6 +271,14 @@ export type OrderView = {
   timeline: OrderTimelineEntry[];
 };
 
+/** The latest WebXPay attempt of a card order (view_order's `card_payment`, 49_card_payments.sql). */
+export type CardPaymentAttempt = {
+  status: "started" | "approved" | "declined" | "review";
+  /** WebXPay's own reason — only for a declined attempt. */
+  message: string | null;
+  at: string | null;
+};
+
 /** view_order extras (the confirmation page). */
 export type OrderConfirmationView = OrderView & {
   firstName: string | null;
@@ -277,6 +288,8 @@ export type OrderConfirmationView = OrderView & {
   pickup: { address: string | null; note: string | null } | null;
   /** The account to pay into — only while a bank transfer is awaited. */
   bankTransfer: BankAccount | null;
+  /** Card orders: the latest WebXPay attempt, or null before the first one. */
+  cardPayment: CardPaymentAttempt | null;
 };
 
 type Row = Record<string, unknown>;
@@ -363,12 +376,19 @@ export function normalizeOrderConfirmation(raw: unknown): OrderConfirmationView 
   if (!view || !isRow(raw)) return null;
   const shipping = isRow(raw.shipping) ? { city: text(raw.shipping.city, 120), district: text(raw.shipping.district, 60) } : null;
   const pickup = isRow(raw.pickup) ? { address: text(raw.pickup.address, 500), note: text(raw.pickup.note, 500) } : null;
+  const attempt = isRow(raw.card_payment) ? raw.card_payment : null;
+  const attemptStatus = attempt?.status;
+  const cardPayment: CardPaymentAttempt | null =
+    attempt && (attemptStatus === "started" || attemptStatus === "approved" || attemptStatus === "declined" || attemptStatus === "review")
+      ? { status: attemptStatus, message: attemptStatus === "declined" ? text(attempt.message, 200) : null, at: text(attempt.at, 64) }
+      : null;
   return {
     ...view,
     firstName: text(raw.first_name, 255),
     shipping,
     pickup,
     bankTransfer: normalizeBankAccount(raw.bank_transfer),
+    cardPayment,
   };
 }
 

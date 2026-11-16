@@ -23,9 +23,10 @@ const DONE: Record<PaymentTarget, string> = {
 };
 
 /**
- * admin_set_payment_status (09): pending_collection | awaiting_transfer → paid, paid → refunded,
- * anything → void on a cancelled order. The RPC re-checks the admin and writes the timeline row
- * ("Payment received" / "Payment refunded" / "No payment due"); nothing is emailed.
+ * admin_set_payment_status (09, widened by 49): pending_collection | awaiting_transfer |
+ * awaiting_payment (card) → paid, paid → refunded, anything → void on a cancelled order. The RPC
+ * re-checks the admin and writes the timeline row ("Payment received" / "Payment refunded" /
+ * "No payment due"); nothing is emailed. A card refund itself is made in WebXPay's portal.
  */
 export function PaymentDialog({ order, target, onClose, onDone }: { order: AdminOrder; target: PaymentTarget; onClose: () => void; onDone: () => void }) {
   const [reference, setReference] = useState(target === "paid" ? (order.paymentRef ?? "") : "");
@@ -76,7 +77,17 @@ export function PaymentDialog({ order, target, onClose, onDone }: { order: Admin
           <Field
             label="Payment reference"
             optional
-            hint={target === "paid" ? (order.paymentMethod === "bank_transfer" ? "The bank transfer reference, for your records (never shown to the customer)." : "e.g. the courier's remittance reference (never shown to the customer).") : "The refund reference, if any."}
+            hint={
+              target === "paid"
+                ? order.paymentMethod === "bank_transfer"
+                  ? "The bank transfer reference, for your records (never shown to the customer)."
+                  : order.paymentMethod === "card"
+                    ? "WebXPay's order reference (T…) from its portal — only once you've seen the payment there (never shown to the customer)."
+                    : "e.g. the courier's remittance reference (never shown to the customer)."
+                : order.paymentMethod === "card"
+                  ? "Make the refund in WebXPay's portal first, then record its reference here."
+                  : "The refund reference, if any."
+            }
           >
             <Input value={reference} maxLength={120} onChange={(event) => setReference(event.target.value)} />
           </Field>

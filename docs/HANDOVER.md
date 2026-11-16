@@ -23,7 +23,8 @@ quotation requests) and how to use them in the admin.
 | Navbar sale — one collection at a time (11.11, Black Friday…) as an electric item in the main menu on every page (desktop header, phone header, phone menu), linking to its page; left off `/collections`. From 1024 to 1279 px wide, while a sale shows, the header keeps the tablet layout (menu button, sale item, full search) because the dropdown menu, the item and the search don't fit side by side (45) | header, `/collection/[id]` |
 | Variants in a collection — a hand-picked product can hold only some of its variants (the ones in a sale): the collection page shows just those (their price, discount, "Option(s): …"; a one-tap add adds that variant) and opens the product page on them; a product in the navbar sale opens on its sale variant and marks whether the shown option is in the sale (46) | `/collection/[id]`, `/product/[id]` |
 | Basket — server-priced totals, free-delivery bar, promo code, WhatsApp order link | `/cart` + the basket drawer |
-| Checkout — home delivery or showroom pickup, cash on delivery or bank transfer (each only while the store offers it), order note, promo code | `/checkout` |
+| Checkout — home delivery or showroom pickup, cash on delivery, bank transfer or card payment (each only while the store offers it), order note, promo code | `/checkout` |
+| Card payment through WebXPay (49) — the order is placed, the shopper pays on WebXPay's page and comes back to the order page: "Payment received", or the decline with "Try again". Confirmation email and owner alert go out when the payment is confirmed. Admin: each order's WebXPay attempts, "Mark paid" by hand, optional "Check with WebXPay" | `/checkout`, `/order/[id]`, `/api/payments/webxpay/*`, admin → Orders / Settings |
 | Bank transfer — the store's account (Bank of Ceylon, Vishaka branch, Dock One Solutions Pvt Ltd, 79503030) shown as a card with copy buttons at checkout, and with the amount and the order number as reference on the order page, in the confirmation email, on tracking, in the customer's account and on the printed invoice — until the owner marks the order paid | `/checkout`, `/order/[id]`, `/track`, `/customer/dashboard` |
 | Order confirmation (private link) and order tracking by number + email | `/order/[id]`, `/track` |
 | Accounts — sign up with email confirmation, sign in, password reset, order history, saved items, tracking, profile/address | `/signin`, `/reset-password`, `/customer/dashboard` |
@@ -138,6 +139,20 @@ run in production mode without the Supabase URL and anon key.
   details from the shopper's pages. The copy button copies the account number's digits only. The
   amount to transfer is always shown in LKR, whatever display currency the shopper picked. The
   assistant says where the bank details are shown but never recites the account number.
+- **Card payment (WebXPay, migration 49):** WebXPay's **redirect** integration (the one its own
+  WooCommerce/Shopify plugins use), not its "Tokenized API v2" — that one needs host names and logins
+  WebXPay issues during onboarding, and saved cards aren't asked for. The order is placed (stock
+  reserved, code used) BEFORE the shopper pays; it shows "Awaiting payment" until WebXPay's signed
+  answer arrives at the Return URL (`/api/payments/webxpay/webhook`), and an order nobody pays stays
+  that way until the owner cancels it (which restocks it). Every answer is checked against WebXPay's
+  public key (both signature forms WebXPay uses), and an approval is applied only for a reference the
+  database issued and exactly the order total — WebXPay's keys reach the browser by design, so anyone
+  could otherwise "pay" Rs. 1 for an order. Anything else is held for review on the order's WebXPay
+  attempts (admin → Orders → the order → Payment). A shopper who paid but closed WebXPay's page before
+  being sent back leaves the order "Awaiting payment": check WebXPay's portal and use "Mark paid" with
+  WebXPay's reference (or "Check with WebXPay" once `WEBXPAY_API_*` are set). Refunds are made in
+  WebXPay's portal, then recorded with "Mark refunded". Only the order page may send a form off-site
+  (its CSP allows `form-action https:`; every other page keeps `'self'`).
 - **Finder quality** depends on product specs. The demo catalogue carries only the facts in its spec
   lines, so some answer combinations honestly return fewer than 3 picks (the page says so).
 - **Order history** shows past orders converted at today's display-currency rate (orders are

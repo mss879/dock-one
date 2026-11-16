@@ -2,6 +2,7 @@ import "server-only";
 import { CACHE_TAGS, cached, readFailSoft, throwDbError } from "@/lib/cache";
 import { isSupabaseConfigured } from "@/lib/env";
 import { isMissingRelation } from "@/lib/rpc-errors";
+import { isWebxpayReady } from "@/lib/payments/webxpay";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { DEFAULT_STORE_SETTINGS, normalizeStoreSettings, type StoreSettings } from "@/lib/settings-shared";
 
@@ -39,8 +40,13 @@ const readSettingsRow = cached(
 /**
  * The store settings singleton (cached, tag `settings`). Never throws: a missing table/row or
  * a DB/transport error yields DEFAULT_STORE_SETTINGS (= the SQL column defaults) and a log line.
+ *
+ * `cardPaymentsEnabled` here is the EFFECTIVE switch every storefront surface uses (checkout,
+ * order page, product facts, basket, page tokens, assistant): the owner's column (49) AND the
+ * WebXPay keys on this server. The admin edits the raw column (Settings tab), not this value.
  */
 export async function getStoreSettings(): Promise<StoreSettings> {
   if (!isSupabaseConfigured) return DEFAULT_STORE_SETTINGS;
-  return readFailSoft("settings.getStoreSettings", async () => normalizeStoreSettings(await readSettingsRow()), DEFAULT_STORE_SETTINGS);
+  const settings = await readFailSoft("settings.getStoreSettings", async () => normalizeStoreSettings(await readSettingsRow()), DEFAULT_STORE_SETTINGS);
+  return settings.cardPaymentsEnabled && !isWebxpayReady() ? { ...settings, cardPaymentsEnabled: false } : settings;
 }

@@ -111,8 +111,9 @@ export function storeFacts(settings: StoreSettings, snapshot: AssistantSnapshot,
   const payments = [
     settings.codEnabled ? `cash on delivery${settings.codMaxTotal !== null ? ` (orders up to ${formatLKR(settings.codMaxTotal)})` : ""}` : null,
     bankTransferReady(settings) ? "bank transfer (the bank details are shown at checkout, on the order confirmation page and in the confirmation email)" : null,
+    settings.cardPaymentsEnabled ? "card payment (debit or credit card, paid on WebXPay's secure payment page straight after placing the order)" : null,
   ].filter(Boolean);
-  lines.push(`- Payment: ${payments.length > 0 ? payments.join(" or ") : "set at checkout"}. No card payments.`);
+  lines.push(`- Payment: ${payments.length > 0 ? payments.join(" or ") : "set at checkout"}.${settings.cardPaymentsEnabled ? "" : " No card payments."}`);
   lines.push(`- Returns: within ${settings.returnsWindowDays} days (details on /returns; returns and complaints go through /contact).`);
   const warranty = factText(settings.warrantyNote, 300);
   if (warranty) lines.push(`- Warranty note from the store: ${warranty}`);

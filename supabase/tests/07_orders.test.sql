@@ -55,8 +55,8 @@ SELECT pg_temp.throws($$UPDATE public.orders SET status = 'lost' WHERE id = 'DO-
                       'one status vocabulary', '%orders_status_valid%');
 SELECT pg_temp.throws($$UPDATE public.orders SET fulfillment = 'drone' WHERE id = 'DO-20004'$$, '23514',
                       'fulfillment is delivery or pickup', '%orders_fulfillment_valid%');
-SELECT pg_temp.throws($$UPDATE public.orders SET payment_method = 'card' WHERE id = 'DO-20004'$$, '23514',
-                      'no card payments', '%orders_payment_method_valid%');
+SELECT pg_temp.throws($$UPDATE public.orders SET payment_method = 'crypto' WHERE id = 'DO-20004'$$, '23514',
+                      'no unknown payment methods (card is 49''s, tested there)', '%orders_payment_method_valid%');
 SELECT pg_temp.throws($$UPDATE public.orders SET payment_status = 'authorized' WHERE id = 'DO-20004'$$, '23514',
                       'payment status vocabulary', '%orders_payment_status_valid%');
 SELECT pg_temp.throws($$UPDATE public.orders SET payment_method = 'bank_transfer' WHERE id = 'DO-20004'$$, '23514',

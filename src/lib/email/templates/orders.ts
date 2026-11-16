@@ -29,6 +29,7 @@ import { bankAccountFromSettings, type StoreSettings } from "@/lib/settings-shar
  * The order emails of blueprint §9.9 — exactly four:
  *   1. order confirmation   (after place_order commits)      → the shopper
  *   2. new-order alert      (same moment, with phone+address) → the owner
+ *      (a CARD order sends 1 and 2 when WebXPay's payment is confirmed instead — lib/payments/notify.ts)
  *   3. out for delivery     (admin status change: tracking reference, COD amount due)
  *   4. delivered            (admin status change: the 48 h issue window)
  *
@@ -75,6 +76,8 @@ export type PlacedOrder = {
   total: number;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  /** WebXPay's reference once a card payment is confirmed (mark_order_paid); null otherwise. */
+  paymentRef: string | null;
   /** The display currency the shopper saw (recorded only — the charge is LKR). */
   currency: string;
   exchangeRate: number;
@@ -160,6 +163,7 @@ export function placedOrderFromRpc(raw: unknown): PlacedOrder | null {
     total: num(raw.total),
     paymentMethod: raw.payment_method,
     paymentStatus: raw.payment_status,
+    paymentRef: text(raw.payment_ref, 120),
     currency: text(raw.currency, 3) ?? "LKR",
     exchangeRate: num(raw.exchange_rate, 1),
   };
@@ -219,9 +223,25 @@ function totalsRows(order: Pick<PlacedOrder, "subtotal" | "shippingFee" | "disco
 
 const spacer = `<div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>`;
 
-/** "Pay Rs. 12,900 in cash when …" / the bank account to pay into / pickup address — the "what happens next" block. */
-function paymentSteps(order: Pick<PlacedOrder, "orderId" | "total" | "fulfillment" | "paymentMethod">, settings: StoreSettings): { html: string; text: string[] } {
+/** The payment line both checkout emails show: "Card payment — paid" once a card payment is confirmed. */
+function paymentSummary(order: Pick<PlacedOrder, "paymentMethod" | "paymentStatus">): string {
+  return order.paymentMethod === "card" && order.paymentStatus === "paid" ? `${paymentMethodLabel(order.paymentMethod)} — paid` : paymentMethodLabel(order.paymentMethod);
+}
+
+/** "Pay Rs. 12,900 in cash when …" / the bank account to pay into / the card payment received — the "what happens next" block. */
+function paymentSteps(
+  order: Pick<PlacedOrder, "orderId" | "total" | "fulfillment" | "paymentMethod" | "paymentStatus" | "paymentRef">,
+  settings: StoreSettings,
+): { html: string; text: string[] } {
   const amount = formatLKR(order.total);
+  if (order.paymentMethod === "card") {
+    const exact = formatLKRExact(order.total);
+    const line =
+      order.paymentStatus === "paid"
+        ? `Payment received: ${exact} by card${order.paymentRef ? ` (WebXPay reference ${order.paymentRef})` : ""}. Thank you!`
+        : `Your order is waiting for your card payment of ${exact}. Pay on your order page (the button below).`;
+    return { html: emailNote(line, "lime"), text: [line] };
+  }
   if (order.paymentMethod === "bank_transfer") {
     const account = bankAccountFromSettings(settings);
     const exact = formatLKRExact(order.total);
@@ -276,7 +296,7 @@ export function orderConfirmationEmail(order: PlacedOrder, settings: StoreSettin
   const intro = `${name ? `Thanks, ${name}. ` : "Thanks. "}We have received your order ${order.orderId}.`;
 
   const html = emailShell({
-    preheader: `Order ${order.orderId} — ${formatLKR(order.total)} (${paymentMethodLabel(order.paymentMethod)})`,
+    preheader: `Order ${order.orderId} — ${formatLKR(order.total)} (${paymentSummary(order)})`,
     eyebrow: `Order ${order.orderId}`,
     heading,
     intro,
@@ -288,7 +308,7 @@ export function orderConfirmationEmail(order: PlacedOrder, settings: StoreSettin
       emailRows(totalsRows(order)),
       spacer,
       emailRows([
-        { label: "Payment", value: paymentMethodLabel(order.paymentMethod) },
+        { label: "Payment", value: paymentSummary(order) },
         { label: "Fulfilment", value: order.fulfillment === "pickup" ? "Showroom pickup" : "Home delivery" },
       ]),
       spacer,
@@ -311,7 +331,7 @@ export function orderConfirmationEmail(order: PlacedOrder, settings: StoreSettin
       ...order.items.map((item) => `- ${itemLabel(item)}: ${formatLKR(item.lineTotal)}`),
       "",
       ...totalsRows(order).map((row) => `${row.label}: ${row.value}`),
-      `Payment: ${paymentMethodLabel(order.paymentMethod)}`,
+      `Payment: ${paymentSummary(order)}`,
       "",
       `View your order: ${viewUrl}`,
       `Track it any time: ${trackUrl}`,
@@ -335,12 +355,13 @@ export function ownerOrderAlertEmail(order: PlacedOrder, settings: StoreSettings
     { label: "Email", value: order.email },
     { label: "Phone", value: order.phone },
     { label: "Fulfilment", value: order.fulfillment === "pickup" ? "Showroom pickup" : "Home delivery" },
-    { label: "Payment", value: paymentMethodLabel(order.paymentMethod) },
+    { label: "Payment", value: paymentSummary(order) },
   ];
+  if (order.paymentMethod === "card" && order.paymentRef) contactRows.push({ label: "WebXPay reference", value: order.paymentRef });
   if (order.currency !== "LKR") contactRows.push({ label: "Shopper's display currency", value: order.currency });
 
   const html = emailShell({
-    preheader: `${customer} · ${formatLKR(order.total)} · ${paymentMethodLabel(order.paymentMethod)}`,
+    preheader: `${customer} · ${formatLKR(order.total)} · ${paymentSummary(order)}`,
     eyebrow: "New order",
     heading: order.orderId,
     intro: `${customer} placed an order for ${formatLKR(order.total)}.`,
@@ -372,7 +393,7 @@ export function ownerOrderAlertEmail(order: PlacedOrder, settings: StoreSettings
     `Open in admin: ${adminUrl}`,
   ]);
 
-  return { to, subject: `New order ${order.orderId} — ${formatLKR(order.total)} (${paymentMethodLabel(order.paymentMethod)})`, html, text };
+  return { to, subject: `New order ${order.orderId} — ${formatLKR(order.total)} (${paymentSummary(order)})`, html, text };
 }
 
 // ── 3. Out for delivery / ready for pickup (shopper) ─────────────────────────

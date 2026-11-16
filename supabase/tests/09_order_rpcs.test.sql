@@ -303,8 +303,10 @@ UPDATE public.store_settings SET pickup_address = '12 Showroom Lane, Colombo 03'
 -- ═════════════════════════════════════════════════════════════════════════════
 SELECT pg_temp.login_anon();
 SELECT set_config('t.o8', pg_temp.po(pg_temp.its(pg_temp.it('Q-CABLE-1M', 1)), NULL, ' Bank_Transfer ')::text, false);
-SELECT pg_temp.throws($$SELECT pg_temp.po(pg_temp.its(pg_temp.it('Q-MOUSE', 1)), NULL, 'card')$$, 'P0001',
+SELECT pg_temp.throws($$SELECT pg_temp.po(pg_temp.its(pg_temp.it('Q-MOUSE', 1)), NULL, 'crypto')$$, 'P0001',
                       'an unknown payment method is refused', 'unsupported_payment_method');
+SELECT pg_temp.throws($$SELECT pg_temp.po(pg_temp.its(pg_temp.it('Q-MOUSE', 1)), NULL, 'card')$$, 'P0001',
+                      'card is refused while the owner has not switched it on (49)', 'unsupported_payment_method');
 SELECT pg_temp.throws($$SELECT pg_temp.po(pg_temp.its(pg_temp.it('Q-MOUSE', 1)), NULL, NULL)$$, 'P0001',
                       'a NULL payment method does not slip through', 'unsupported_payment_method');
 -- the blueprint's 12-argument call with a forged status: the 12th argument is the fulfilment now

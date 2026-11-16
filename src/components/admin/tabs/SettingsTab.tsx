@@ -4,6 +4,7 @@ import { RefreshCw, RotateCcw, Save } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { InfoLine, RichPreview, SETTINGS_MIGRATION, SETTINGS_WRITE, useStoreSettingsRow } from "@/components/admin/homepage/shared";
 import { useAdminAccess } from "@/components/admin/access";
+import { useWebxpayStatus } from "@/components/admin/orders/CardPayments";
 import { getAdminTab } from "@/components/admin/registry";
 import { ImageOptimiser } from "@/components/admin/settings/ImageOptimiser";
 import { formFromRow, patchFromForm, validateSettings, type SettingsErrors, type SettingsForm } from "@/components/admin/settings/settings-form";
@@ -65,6 +66,7 @@ export default function SettingsTab() {
   const [saving, setSaving] = useState(false);
   const [stale, setStale] = useState(false);
   const [confirm, confirmElement] = useConfirm();
+  const webxpay = useWebxpayStatus();
 
   if (query.data !== undefined && query.data !== source) {
     setSource(query.data);
@@ -224,7 +226,7 @@ export default function SettingsTab() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Payments" description="The only payment methods the checkout offers. There are no card payments." footer={footer}>
+        <SectionCard title="Payments" description="The only payment methods the checkout offers." footer={footer}>
           <div className="grid gap-5">
             <Toggle label="Cash on delivery" checked={form.codEnabled} onChange={(codEnabled) => update({ codEnabled })} />
             <Field label="Cash on delivery limit" optional hint="Orders above this total must use another method. Empty = no limit." error={error("codMaxTotal")}>
@@ -277,7 +279,38 @@ export default function SettingsTab() {
                 promise it are hidden. Fill them in, or switch bank transfer off.
               </Warning>
             )}
-            {!form.codEnabled && !bankOffered && <Warning>No payment method is offered right now — the checkout can&apos;t take orders.</Warning>}
+            <div className="grid gap-3 border-t border-adm-line pt-5">
+              <Toggle
+                label="Card payment (WebXPay)"
+                description="Shoppers pay by card on WebXPay's payment page straight after ordering. The order is marked paid by itself when WebXPay confirms the payment — and only then are the confirmation email and your new-order alert sent. An order nobody pays stays “Awaiting payment”: cancel it in Orders to put its stock back."
+                checked={form.cardPaymentsEnabled}
+                disabled={!form.cardPaymentsSupported}
+                onChange={(cardPaymentsEnabled) => update({ cardPaymentsEnabled })}
+              />
+              {!form.cardPaymentsSupported && <Warning>Card payment needs migration 49_card_payments.sql — run it in the Supabase SQL editor, then press Reload.</Warning>}
+              {webxpay.data ? (
+                webxpay.data.ready ? (
+                  <InfoLine>
+                    The server has the WebXPay keys ({webxpay.data.environment === "staging" ? "staging — test payments" : "live payments"}). In WebXPay&apos;s portal, Settings → Website
+                    integration → Return URL must be{" "}
+                    <code className="font-mono text-adm-ink select-all">
+                      {typeof window === "undefined" ? webxpay.data.returnPath : `${window.location.origin}${webxpay.data.returnPath}`}
+                    </code>
+                    .
+                  </InfoLine>
+                ) : (
+                  <Warning>
+                    The server is missing {webxpay.data.missing.join(", ")} — so the checkout won&apos;t offer card payment{form.cardPaymentsEnabled ? " even though it's switched on" : ""}. Add them
+                    to the site&apos;s environment variables (see .env.example) and redeploy.
+                  </Warning>
+                )
+              ) : webxpay.error ? (
+                <InfoLine>Couldn&apos;t read the server&apos;s WebXPay setup just now.</InfoLine>
+              ) : null}
+            </div>
+            {!form.codEnabled && !bankOffered && !(form.cardPaymentsEnabled && webxpay.data?.ready) && (
+              <Warning>No payment method is offered right now — the checkout can&apos;t take orders.</Warning>
+            )}
           </div>
         </SectionCard>
 

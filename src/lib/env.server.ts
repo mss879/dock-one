@@ -16,6 +16,21 @@ export const serverEnv = {
   cartRecoverySecret: read("CART_RECOVERY_SECRET"),
   /** Must equal app_config.maintenance. Authorises the daily /api/maintenance job. */
   maintenanceSecret: read("MAINTENANCE_SECRET"),
+  /** Must equal app_config.payments (49). Lets the server open WebXPay attempts and record WebXPay's answers. */
+  paymentsSecret: read("PAYMENTS_SECRET"),
+
+  /** WebXPay (card payments, lib/payments/webxpay.ts). Unset key → the checkout offers no card payment. */
+  webxpaySecretKey: read("WEBXPAY_SECRET_KEY"),
+  /** The PEM public key from WebXPay's portal (line breaks may be real, "\n", or spaces). */
+  webxpayPublicKey: read("WEBXPAY_PUBLIC_KEY"),
+  /** "staging" → stagingxpay.info; anything else → the live gateway (webxpay.com). */
+  webxpayEnvironment: read("WEBXPAY_ENVIRONMENT").toLowerCase() === "staging" ? ("staging" as const) : ("live" as const),
+  /** Optional "|"-separated WebXPay gateway ids to offer (one id skips WebXPay's selection page). */
+  webxpayGatewayIds: read("WEBXPAY_GATEWAY_IDS"),
+  /** Optional: WebXPay's transaction API (Merchant API → "Login with API credentials"), for the admin's "Check with WebXPay". */
+  webxpayApiUsername: read("WEBXPAY_API_USERNAME"),
+  webxpayApiPassword: read("WEBXPAY_API_PASSWORD"),
+  webxpayMerchantNumber: read("WEBXPAY_MERCHANT_NUMBER"),
 
   resendApiKey: read("RESEND_API_KEY"),
   resendFromEmail: read("RESEND_FROM_EMAIL"),

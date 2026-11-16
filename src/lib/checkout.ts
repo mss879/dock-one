@@ -68,6 +68,7 @@ export const CHECKOUT_COPY = {
   invalidEmail: "Please enter a valid email address.",
   invalidName: "Please enter your first name.",
   invalidLastName: "Last names can be up to 255 characters.",
+  lastNameForCard: "Please enter your last name — the card payment needs it.",
   invalidPhone: "Please enter a valid phone number, e.g. 077 123 4567.",
   invalidAddress: "Please enter your street address, city and district.",
   invalidStreet: "Please enter your street address.",
@@ -98,7 +99,7 @@ export function invalidVariantMessage(name: string): string {
 
 /** LKR amounts inside route copy are formatted like formatLKR (the client renders numbers through <Price>). */
 export function codLimitMessage(maxFormatted: string): string {
-  return `Cash on delivery is available for orders up to ${maxFormatted}. Please choose bank transfer.`;
+  return `Cash on delivery is available for orders up to ${maxFormatted}. Please choose another payment method.`;
 }
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
@@ -238,6 +239,8 @@ export function validateCheckoutForm(values: CheckoutFormValues): CheckoutFieldE
     exchangeRate: 1,
   });
   const errors = result.success ? {} : fieldErrorsFrom(result.error.issues);
+  // WebXPay's payment page requires a last name (/api/checkout checks the same).
+  if (values.paymentMethod === "card" && !values.lastName.trim() && !errors.lastName) errors.lastName = CHECKOUT_COPY.lastNameForCard;
   if (values.fulfillment === "delivery") {
     const address = shippingSchema.safeParse(values.shipping);
     if (!address.success) {

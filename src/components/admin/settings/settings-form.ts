@@ -25,6 +25,10 @@ export type SettingsForm = {
   bankAccountNumber: string;
   /** Optional extra note shown under the account. */
   bankTransferInstructions: string;
+  /** Card payments through WebXPay (49). */
+  cardPaymentsEnabled: boolean;
+  /** The row has 49's column — before 49 is applied the switch is shown but never saved. */
+  cardPaymentsSupported: boolean;
   phone: string;
   whatsapp: string;
   email: string;
@@ -71,6 +75,8 @@ export function formFromRow(row: Row | null): SettingsForm {
     bankBranch: str(r.bank_branch),
     bankAccountNumber: str(r.bank_account_number),
     bankTransferInstructions: str(r.bank_transfer_instructions),
+    cardPaymentsEnabled: r.card_payments_enabled === true,
+    cardPaymentsSupported: row !== null && "card_payments_enabled" in r,
     phone: str(r.phone),
     whatsapp: str(r.whatsapp),
     email: str(r.email),
@@ -113,6 +119,8 @@ export function patchFromForm(form: SettingsForm): Row {
     bank_branch: orNull(form.bankBranch),
     bank_account_number: accountNumber(form.bankAccountNumber),
     bank_transfer_instructions: orNull(form.bankTransferInstructions),
+    // Only once 49 added the column: an unknown column would fail the whole save.
+    ...(form.cardPaymentsSupported ? { card_payments_enabled: form.cardPaymentsEnabled } : {}),
     phone: orNull(form.phone),
     whatsapp: orNull(form.whatsapp),
     email: orNull(form.email),

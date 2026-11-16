@@ -60,7 +60,10 @@ INSERT INTO allow_anon (fn, migration) VALUES
   ('public.run_retention(text)',                         '22_retention (secret)'),
   ('public.request_quotation(jsonb,jsonb)',              '40_sales_documents (route)'),
   ('public.get_public_quotation(integer,uuid)',          '40_sales_documents (token)'),
-  ('public.ping_product_view(integer,uuid)',             '42_storefront_extras (route)');
+  ('public.ping_product_view(integer,uuid)',             '42_storefront_extras (route)'),
+  ('public.begin_card_payment(text,text,uuid)',          '49_card_payments (secret)'),
+  ('public.mark_order_paid(text,text,jsonb)',            '49_card_payments (secret)'),
+  ('public.record_card_payment_failure(text,text,jsonb)', '49_card_payments (secret)');
 
 CREATE TEMP TABLE allow_authenticated (fn text PRIMARY KEY, migration text NOT NULL); -- grant U (NOT anon)
 INSERT INTO allow_authenticated (fn, migration) VALUES
@@ -176,7 +179,8 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.staff_api_map',           ARRAY['anon', 'authenticated'], '39_staff_accounts'),
   ('public.suppliers',               ARRAY['anon'],                  '41_suppliers_warranty'),
   ('public.unit_warranties',         ARRAY['anon', 'authenticated'], '41_suppliers_warranty'),
-  ('public.product_presence',        ARRAY['anon', 'authenticated'], '42_storefront_extras');
+  ('public.product_presence',        ARRAY['anon', 'authenticated'], '42_storefront_extras'),
+  ('public.payment_attempts',        ARRAY['anon'],                  '49_card_payments');
 
 -- ── the lists themselves are valid ──────────────────────────────────────────
 SELECT pg_temp.eq((SELECT string_agg(fn || ' (' || migration || ')', ', ' ORDER BY fn)

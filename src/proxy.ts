@@ -20,9 +20,20 @@ const SESSION_AREAS = ["/customer", "/wishlist", "/checkout", "/order", "/admin"
 
 /**
  * Never locked (§6.1): the admin and its APIs, the lock's own unlock route, job endpoints (they
- * authenticate with their own secret), the auth callback (confirm/reset links) and the holding page.
+ * authenticate with their own secret), the auth callback (confirm/reset links), the holding page,
+ * and WebXPay's Return URL (the shopper's browser arrives from WebXPay without our unlock cookie;
+ * the route verifies WebXPay's signature itself).
  */
-const ALWAYS_OPEN = ["/admin", "/api/admin", "/api/site-lock", "/api/cart-recovery", "/api/maintenance", "/auth", "/launching-soon"];
+const ALWAYS_OPEN = [
+  "/admin",
+  "/api/admin",
+  "/api/site-lock",
+  "/api/cart-recovery",
+  "/api/maintenance",
+  "/api/payments/webxpay/webhook",
+  "/auth",
+  "/launching-soon",
+];
 
 function inArea(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

@@ -30,6 +30,8 @@ export type StoreSettings = {
   bankAccountNumber: string | null;
   /** Optional extra note shown under the bank account. */
   bankTransferInstructions: string | null;
+  /** The owner's switch for card payments through WebXPay (49). The server must also hold the WebXPay keys. */
+  cardPaymentsEnabled: boolean;
   pickupEnabled: boolean;
   pickupAddress: string | null;
   pickupNote: string | null;
@@ -70,6 +72,7 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   bankBranch: null,
   bankAccountNumber: null,
   bankTransferInstructions: null,
+  cardPaymentsEnabled: false,
   pickupEnabled: true,
   pickupAddress: null,
   pickupNote: null,
@@ -165,6 +168,7 @@ export function normalizeStoreSettings(row: Record<string, unknown> | null | und
     bankBranch: text(row.bank_branch, 120),
     bankAccountNumber: text(row.bank_account_number, 40),
     bankTransferInstructions: text(row.bank_transfer_instructions, 2000),
+    cardPaymentsEnabled: bool(row.card_payments_enabled, d.cardPaymentsEnabled),
     pickupEnabled: bool(row.pickup_enabled, d.pickupEnabled),
     pickupAddress: text(row.pickup_address, 500),
     pickupNote: text(row.pickup_note, 500),

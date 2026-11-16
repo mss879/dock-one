@@ -64,6 +64,7 @@ export function ProductFacts({ settings, warrantyMonths }: { settings: StoreSett
     );
   }
   if (bankTransferReady(settings)) payments.push(<span key="bank">Bank transfer</span>);
+  if (settings.cardPaymentsEnabled) payments.push(<span key="card">Card payment</span>);
   if (payments.length > 0) {
     facts.push({
       key: "payment",

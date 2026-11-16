@@ -33,6 +33,7 @@ import {
   paymentStatusTone,
 } from "@/lib/orders";
 import type { StoreSettings } from "@/lib/settings-shared";
+import { CardPaymentAttempts } from "./CardPayments";
 import { PaymentDialog, type PaymentTarget } from "./PaymentDialog";
 import { printInvoice, printPackingSlip } from "./printOrder";
 import { StatusDialog, notifiedLine, type OrderStatusResponse } from "./StatusDialog";
@@ -357,6 +358,9 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
                 { label: "Reference", value: order.paymentRef ?? "—" },
               ]}
             />
+            {order.paymentMethod === "card" && (
+              <CardPaymentAttempts orderId={order.id} awaiting={order.paymentStatus === "awaiting_payment" && !cancelled} onChanged={refresh} />
+            )}
           </SectionCard>
 
           <SectionCard title="Tracking" description="Saved through the status route, so the customer's timeline shows every change.">

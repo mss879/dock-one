@@ -1,4 +1,5 @@
 import { bankTransferProvider } from "./bank-transfer";
+import { cardProvider } from "./card";
 import { codProvider } from "./cod";
 import type { PaymentMethod, PaymentProvider } from "./types";
 
@@ -8,10 +9,13 @@ export { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentProv
  * Registered providers. To add a gateway: implement PaymentProvider, add a signature-verified
  * webhook route that calls an admin/secret-gated "mark paid" RPC, allow the (method, status)
  * pair in SQL (07's CHECKs + place_order), and register it here. Checkout does not change.
+ * Card (WebXPay) is the worked example: 49_card_payments.sql, lib/payments/webxpay.ts and
+ * app/api/payments/webxpay/.
  */
 const providers: Record<PaymentMethod, PaymentProvider> = {
   cod: codProvider,
   bank_transfer: bankTransferProvider,
+  card: cardProvider,
 };
 
 /** The provider for a method the client named, or null (→ 422 unsupported_payment_method). */

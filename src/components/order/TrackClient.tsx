@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { TRACK_NOT_FOUND_MESSAGE } from "@/lib/checkout";
 import { formatOrderDate, isCancelledOrder, orderStatusLabel, paymentMethodLabel, paymentStatusLabel, type OrderView } from "@/lib/orders";
 import { bankAccountFromSettings } from "@/lib/settings-shared";
@@ -17,6 +17,10 @@ import { OrderTotals } from "./OrderTotals";
 
 const GENERIC = "We couldn't look that up just now. Please try again in a moment.";
 
+const noSubscribe = () => () => {};
+/** `?payment=unverified`: WebXPay's Return URL could not confirm a payment (api/payments/webxpay/webhook). */
+const readUnverified = () => new URLSearchParams(window.location.search).get("payment") === "unverified";
+
 /**
  * Guest tracking (blueprint §9.8): order number + email in a POST body (never the URL) →
  * /api/track → track_guest_order. Wrong and missing orders read the same.
@@ -29,8 +33,11 @@ export function TrackClient() {
   const [result, setResult] = useState<OrderView | null>(null);
   const honeypot = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
-  const bankAccount = bankAccountFromSettings(useStoreSettings());
+  const settings = useStoreSettings();
+  const bankAccount = bankAccountFromSettings(settings);
   const awaitingTransfer = result !== null && result.paymentMethod === "bank_transfer" && result.paymentStatus === "awaiting_transfer" && !isCancelledOrder(result.status);
+  const awaitingCard = result !== null && result.paymentMethod === "card" && result.paymentStatus === "awaiting_payment" && !isCancelledOrder(result.status);
+  const unverified = useSyncExternalStore(noSubscribe, readUnverified, () => false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -66,6 +73,12 @@ export function TrackClient() {
 
   return (
     <div className="grid items-start gap-10 lg:grid-cols-[400px_1fr] xl:gap-12">
+      {unverified && (
+        <Notice tone="info" title="We couldn't confirm your card payment here" className="lg:col-span-2">
+          If your card was charged, please don&apos;t pay again — contact us with your order number and we&apos;ll confirm it
+          {settings.phone ? ` (call ${settings.phone})` : ""}. You can check your order below with its number and your email.
+        </Notice>
+      )}
       <form onSubmit={submit} noValidate className="relative space-y-5 border border-ink bg-surface p-5 sm:p-6">
         <Cross className="-top-[6px] -left-[6px]" />
         <Cross className="-right-[6px] -bottom-[6px]" />
@@ -107,6 +120,12 @@ export function TrackClient() {
                   title="Awaiting your transfer"
                   intro="Transfer the amount below to our bank account, with your order number as the payment reference."
                 />
+              )}
+              {awaitingCard && (
+                <Notice tone="info" title="Awaiting your card payment">
+                  We haven&apos;t received the card payment for this order yet. Pay from the order page you saw after checkout
+                  {settings.phone ? `, or call ${settings.phone} and we'll help` : ""}.
+                </Notice>
               )}
               {result.trackingNumber && (
                 <p className="text-sm text-ink-2">

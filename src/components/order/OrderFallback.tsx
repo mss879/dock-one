@@ -42,7 +42,12 @@ export function OrderFallback({ orderId, reason, bankAccount }: { orderId: strin
               />
             ) : (
               <p className="mt-2 text-sm text-ink-2">
-                {copy.paymentMethod === "bank_transfer" ? (
+                {copy.paymentMethod === "card" ? (
+                  <>
+                    Card payment of <span className="font-mono font-semibold">{formatLKRExact(copy.total)}</span>. If you haven&apos;t paid yet, reload this page in a moment
+                    to pay — your order is saved.
+                  </>
+                ) : copy.paymentMethod === "bank_transfer" ? (
                   <>
                     Pay <span className="font-mono font-semibold">{formatLKRExact(copy.total)}</span> by bank transfer, using {copy.orderId} as the reference.
                   </>

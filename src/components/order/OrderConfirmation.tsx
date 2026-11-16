@@ -1,4 +1,4 @@
-import { Banknote, Landmark, MapPin, Store } from "lucide-react";
+import { Banknote, CreditCard, Landmark, MapPin, Store } from "lucide-react";
 import Link from "next/link";
 import {
   formatOrderDate,
@@ -15,6 +15,7 @@ import { Cross } from "@/components/ui/Cross";
 import { Price } from "@/components/ui/Price";
 import { AccountCta } from "./AccountCta";
 import { BankTransferDetails } from "./BankTransferDetails";
+import { CardPaymentPanel } from "./CardPaymentPanel";
 import { OrderItems } from "./OrderItems";
 import { OrderStepper } from "./OrderStepper";
 import { OrderTimeline } from "./OrderTimeline";
@@ -31,15 +32,26 @@ function SectionTitle({ index, title, id }: { index: string; title: string; id: 
 /**
  * /order/[id] body (blueprint §9.4): the "order placed" hero in the storefront's dark HUD style,
  * what happens next (cash due / the bank account to pay into, with the amount and the order
- * number as reference / pickup details), the items and totals as charged, the live stepper + timeline, a tracking link and —
+ * number as reference / the card payment to complete or the card payment received / pickup
+ * details), the items and totals as charged, the live stepper + timeline, a tracking link and —
  * for guests — the create-an-account prompt. Only what view_order returns (never the street,
  * phone, email or payment reference).
  */
-export function OrderConfirmation({ order, openingHours }: { order: OrderConfirmationView; openingHours: string | null }) {
+export function OrderConfirmation({
+  order,
+  openingHours,
+  card,
+}: {
+  order: OrderConfirmationView;
+  openingHours: string | null;
+  /** The card payment panel's inputs: the page's view token, whether the store can take card payments now, and the checkout's `pay=1`. */
+  card: { token: string; ready: boolean; autoStart: boolean };
+}) {
   const pickup = order.fulfillment === "pickup";
   const cancelled = isCancelledOrder(order.status);
   const due = isPaymentDue(order.paymentStatus);
   const placedAt = formatOrderDate(order.createdAt);
+  const awaitingCard = !cancelled && order.paymentMethod === "card" && order.paymentStatus === "awaiting_payment";
 
   return (
     <div className="space-y-12">
@@ -56,11 +68,15 @@ export function OrderConfirmation({ order, openingHours }: { order: OrderConfirm
             </span>
           </p>
           <h1 id="order-hero" className="display mt-5 text-[clamp(2.75rem,6vw,5rem)]">
-            {cancelled ? "Order cancelled" : `Thank you${order.firstName ? `, ${order.firstName}` : ""}`}
+            {cancelled ? "Order cancelled" : awaitingCard ? `Almost done${order.firstName ? `, ${order.firstName}` : ""}` : `Thank you${order.firstName ? `, ${order.firstName}` : ""}`}
             <span className="text-lime">_</span>
           </h1>
           <p className="mt-4 max-w-xl text-[15px] text-paper/80">
-            {cancelled ? `Order ${order.orderId} has been cancelled.` : `We have received your order ${order.orderId}. Keep this number — you'll need it to track your order.`}
+            {cancelled
+              ? `Order ${order.orderId} has been cancelled.`
+              : awaitingCard
+                ? `Your order ${order.orderId} is saved. Pay by card below to confirm it.`
+                : `We have received your order ${order.orderId}. Keep this number — you'll need it to track your order.`}
           </p>
           <div className="mt-8 max-w-2xl">
             <OrderStepper status={order.status} fulfillment={order.fulfillment} tone="dark" />
@@ -72,8 +88,30 @@ export function OrderConfirmation({ order, openingHours }: { order: OrderConfirm
         <div className="min-w-0 space-y-12">
           {!cancelled && (
             <section aria-labelledby="order-next" className="space-y-5">
-              <SectionTitle index="02" title="What happens next" id="order-next" />
-              {order.paymentMethod === "bank_transfer" && order.paymentStatus === "awaiting_transfer" ? (
+              <SectionTitle index="02" title={awaitingCard ? "Pay for your order" : "What happens next"} id="order-next" />
+              {awaitingCard ? (
+                <CardPaymentPanel
+                  orderId={order.orderId}
+                  token={card.token}
+                  amount={order.totalPrice}
+                  attempt={order.cardPayment}
+                  ready={card.ready}
+                  autoStart={card.autoStart}
+                />
+              ) : order.paymentMethod === "card" && order.paymentStatus === "paid" ? (
+                <p className="flex items-start gap-3 border border-ink bg-surface p-5">
+                  <span aria-hidden className="grid size-9 shrink-0 place-items-center bg-ink text-lime">
+                    <CreditCard className="size-4" />
+                  </span>
+                  <span>
+                    <span className="block font-semibold">Payment received</span>
+                    <span className="mt-1 block text-sm text-ink-2">
+                      You paid <span className="font-mono font-semibold text-ink">{formatLKRExact(order.totalPrice)}</span> by card — thank you. We&apos;ll keep you posted here and by
+                      email as your order moves along.
+                    </span>
+                  </span>
+                </p>
+              ) : order.paymentMethod === "bank_transfer" && order.paymentStatus === "awaiting_transfer" ? (
                 order.bankTransfer ? (
                   <BankTransferDetails
                     account={order.bankTransfer}

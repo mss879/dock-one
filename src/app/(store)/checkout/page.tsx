@@ -58,7 +58,12 @@ export default async function CheckoutPage() {
   return (
     <main id="main" className="shell pt-8 pb-24 lg:pt-12">
       <PageHeader title="Checkout" crumbs={[{ label: "Home", href: "/" }, { label: "Basket", href: "/cart" }, { label: "Checkout" }]} />
-      <CheckoutClient settings={toPublicSettings(settings)} prefill={prefill} policies={{ terms: policies.terms, refunds: policies.refunds }} />
+      <CheckoutClient
+        settings={toPublicSettings(settings)}
+        prefill={prefill}
+        policies={{ terms: policies.terms, refunds: policies.refunds }}
+        cardReady={settings.cardPaymentsEnabled}
+      />
     </main>
   );
 }

@@ -37,12 +37,15 @@ export default function config(phase: string): NextConfig {
   const supabaseIsLocal = supabase ? LOOPBACK.has(supabase.hostname) : false;
   const siteIsHttps = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().startsWith("https://");
 
-  const csp = [
+  // `formAction` differs on ONE page: the order page (/order/[id]) submits the card payment form to
+  // WebXPay, whose checkout may hand the browser on to the card's bank, so a form there may leave
+  // for any https site. Every other page keeps form-action 'self'. (lib/payments/webxpay.ts)
+  const cspWith = (formAction: string) => [
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
-    "form-action 'self'",
+    `form-action ${formAction}`,
     // Next's bootstrap and inline JSON-LD need 'unsafe-inline'; React needs eval only in development.
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
@@ -53,6 +56,8 @@ export default function config(phase: string): NextConfig {
     "worker-src 'self' blob:",
     ...(isDev || !siteIsHttps || supabaseIsLocal ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
+  const csp = cspWith("'self'");
+  const orderPageCsp = cspWith("'self' https:");
 
   const securityHeaders = [
     { key: "Content-Security-Policy", value: csp },
@@ -98,6 +103,9 @@ export default function config(phase: string): NextConfig {
     async headers() {
       return [
         { source: "/(.*)", headers: securityHeaders },
+        // Later rules override earlier ones for the same header (Next docs, "Header Overriding
+        // Behavior"): the order page alone may submit a form off-site — the WebXPay payment form.
+        { source: "/order/:path*", headers: [{ key: "Content-Security-Policy", value: orderPageCsp }] },
         { source: "/admin/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
         { source: "/api/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] },
       ];

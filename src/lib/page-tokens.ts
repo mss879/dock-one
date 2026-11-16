@@ -38,6 +38,7 @@ export type PageTokenSettings = Pick<
   | "bankBranch"
   | "bankAccountNumber"
   | "bankTransferInstructions"
+  | "cardPaymentsEnabled"
 >;
 
 /** Every token, with the admin's "Formatting help" text. */
@@ -91,7 +92,11 @@ export function pageTokenValues(settings: PageTokenSettings): PageTokenValues {
   const phone = settings.phone?.trim() || null;
   const whatsapp = phoneDigits(settings.whatsapp);
   const pickup = settings.pickupEnabled && Boolean(settings.pickupAddress?.trim());
-  const methods = [settings.codEnabled ? "cash on delivery" : null, bankTransferReady(settings) ? "bank transfer" : null].filter((m): m is string => m !== null);
+  const methods = [
+    settings.codEnabled ? "cash on delivery" : null,
+    bankTransferReady(settings) ? "bank transfer" : null,
+    settings.cardPaymentsEnabled ? "card payment" : null,
+  ].filter((m): m is string => m !== null);
   return {
     store_name: text(settings.storeName),
     address: text(settings.address),

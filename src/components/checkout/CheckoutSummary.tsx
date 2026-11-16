@@ -30,6 +30,8 @@ type Props = {
   promoError: string | null;
   highlightVariantId: number | null;
   policies?: CheckoutPolicies | null;
+  /** Card: the button reads "Continue to payment" — the shopper pays on WebXPay's page next. */
+  payByCard?: boolean;
 };
 
 /**
@@ -51,6 +53,7 @@ export function CheckoutSummary({
   promoError,
   highlightVariantId,
   policies = null,
+  payByCard = false,
 }: Props) {
   const { isBase } = useCurrency();
   const q = quote.quote;
@@ -163,7 +166,7 @@ export function CheckoutSummary({
           </Notice>
         )}
         <Button type="submit" form={formId} size="lg" className="w-full" disabled={!canSubmit || submitting} aria-busy={submitting || undefined}>
-          {submitting ? "Placing order…" : "Place order"}
+          {submitting ? "Placing order…" : payByCard ? "Continue to payment" : "Place order"}
         </Button>
         <PolicyNote policies={policies} />
       </div>

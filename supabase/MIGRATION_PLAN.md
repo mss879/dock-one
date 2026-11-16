@@ -60,6 +60,14 @@ what to do right after, and how to check it worked.
 > switchable off. It starts as the navbar was — Computing, Accessories, Cameras — with **Deals and
 > New switched off** while 11.11 runs. Before 48 runs, the website already shows that menu (built in).
 
+> **Added 2026-11-16 — one new file: run 49** (safe to re-run; needs 01–48): **card payments through
+> WebXPay**. A third payment method, "Card payment": the shopper places the order, pays on WebXPay's
+> page, and WebXPay's signed answer marks the order paid. It stays **off** until the owner switches it
+> on in admin → Settings → Payments, and the checkout offers it only while the server also has the
+> WebXPay keys — so running 49 before or after the deploy changes nothing at checkout. 49 creates the
+> `payments` secret: copy it into `PAYMENTS_SECRET` (query below). Re-run 49 after any re-run of 09 or
+> 40 (it replaces four of their functions).
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -632,6 +640,27 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   is chosen in Collections. Before 48: the header shows the same built-in menu.
 - **Check:** `SELECT parent_id, position, kind, label, category_id, collection_id, href, is_visible FROM public.nav_menu_items ORDER BY COALESCE(parent_id, id), parent_id NULLS FIRST, position;`
 
+### 49 — Card payments (WebXPay) · `49_card_payments.sql`
+- **Adds:** the payment method `card` (orders start `awaiting_payment`) with the order CHECKs widened;
+  `store_settings.card_payments_enabled` (**off**); `payment_attempts` — one row per trip to WebXPay,
+  with its unguessable reference, the amount asked for and WebXPay's answer (admin / staff with
+  Orders read it; nobody writes it by hand); three functions the server calls with `PAYMENTS_SECRET`:
+  `begin_card_payment` (opens an attempt for an unpaid card order), `mark_order_paid` (WebXPay
+  approved — applied only for exactly the amount asked; otherwise held for review) and
+  `record_card_payment_failure`. Replaces `place_order`, `view_order`, `admin_set_payment_status`
+  (an admin can mark a card payment paid by hand) and `_web_invoice_receipt` (a card order's receipt
+  says "card"). Adds WebXPay to the privacy page's list of services (only if its hosting line is
+  unchanged). Creates the `payments` secret in `app_config` once.
+- **Needs:** 01–48. Run again after any re-run of 09 or 40.
+- **Switches on:** nothing by itself. Then: copy the secret into `PAYMENTS_SECRET`; set
+  `WEBXPAY_SECRET_KEY` and `WEBXPAY_PUBLIC_KEY` (WebXPay portal → Settings → Integration
+  information); in WebXPay's portal → Settings → Website integration set the Return URL to
+  `https://dockonesolutions.com/api/payments/webxpay/webhook`; redeploy; switch on admin → Settings →
+  Payments → **Card payment (WebXPay)** (that section also shows which keys the server is missing).
+- **Check:** `SELECT value FROM public.app_config WHERE name = 'payments';` (→ `PAYMENTS_SECRET`) ·
+  `SELECT card_payments_enabled FROM public.store_settings;` · after a test payment:
+  `SELECT o.id, o.payment_status, a.reference, a.status, a.gateway_message, a.review_reason FROM public.payment_attempts a JOIN public.orders o ON o.id = a.order_id ORDER BY a.created_at DESC LIMIT 10;`
+
 ---
 
 ## 3. Demo content (seeds 30–33) — optional, replace before launch
@@ -667,7 +696,8 @@ workbook cell.
 1. Migrations `01`–`23` applied in order; seeds only if wanted; `24` run after the admin account
    is created and confirmed.
 2. Secrets created in the database **and** set in the host with the same values:
-   `RATE_LIMIT_SECRET` (01), `CART_RECOVERY_SECRET` (13), `MAINTENANCE_SECRET` (22).
+   `RATE_LIMIT_SECRET` (01), `CART_RECOVERY_SECRET` (13), `MAINTENANCE_SECRET` (22),
+   `PAYMENTS_SECRET` (49 — created by the migration; card payments only).
 3. Jobs scheduled: `/api/cart-recovery` hourly, `/api/maintenance` daily (`docs/build/JOBS.md`).
 4. Supabase Auth configured per `docs/build/AUTH_SETUP.md`; the owner promoted to admin (02).
 5. Admin → Settings: real contact details; bank account checked (Payments — filled by 03);

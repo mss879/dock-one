@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Banknote, Landmark, Store, Truck } from "lucide-react";
+import { Banknote, CreditCard, Landmark, Store, Truck } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { track } from "@/lib/analytics";
 import { cart, useCart } from "@/lib/cart";
@@ -96,20 +96,25 @@ function StepHeader({ index, title, id }: { index: string; title: string; id: st
 
 /**
  * /checkout client island (blueprint §9.4): contact, delivery or showroom pickup, address,
- * payment (COD / bank transfer — only what store_settings enables and quote_order says this
- * basket may use), order note, honeypot, the checkout autosave hook (WP-E), the parked offer
- * code, `begin_checkout`. Submits to POST /api/checkout; on success: clear the basket, keep a
- * sessionStorage copy, and go to /order/<id>?t=<view_token>.
+ * payment (COD / bank transfer / card — only what store_settings enables and quote_order says this
+ * basket may use; card also needs the server's WebXPay keys), order note, honeypot, the checkout
+ * autosave hook (WP-E), the parked offer code, `begin_checkout`. Submits to POST /api/checkout; on
+ * success: clear the basket, keep a sessionStorage copy, and go to /order/<id>?t=<view_token> — for
+ * card with `&pay=1` as a FULL page load, because only the order page may send the payment form to
+ * WebXPay (its CSP, next.config.ts) and it starts the payment from there.
  */
 export function CheckoutClient({
   settings,
   prefill,
   policies = null,
+  cardReady = false,
 }: {
   settings: PublicStoreSettings;
   prefill: CheckoutPrefill | null;
   /** The published Terms and Refund policy pages, linked by the Place order button. */
   policies?: CheckoutPolicies | null;
+  /** Card payment can be offered: the owner's switch is on and the server has the WebXPay keys. */
+  cardReady?: boolean;
 }) {
   const router = useRouter();
   const hydrated = useHydrated();
@@ -154,8 +159,8 @@ export function CheckoutClient({
     return () => window.removeEventListener(SIGNED_OUT_EVENT, clear);
   }, []);
   const [submitting, setSubmitting] = useState(false);
-  /** null · "redirecting" (going to /order/<id>) · "placed" (committed, but no confirmation link came back). */
-  const [placed, setPlaced] = useState<null | "redirecting" | "placed">(null);
+  /** null · "redirecting" (going to /order/<id>) · "paying" (card: going to the order page, which sends the shopper to WebXPay) · "placed" (committed, but no confirmation link came back). */
+  const [placed, setPlaced] = useState<null | "redirecting" | "paying" | "placed">(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<number | null>(null);
@@ -167,6 +172,8 @@ export function CheckoutClient({
   const pickupAvailable = q ? q.pickupAvailable : settings.pickupEnabled && Boolean(settings.pickupAddress);
   const codAvailable = q ? q.codAvailable : settings.codEnabled;
   const bankAvailable = q ? q.bankTransferAvailable : bankTransferReady(settings);
+  // WebXPay takes nothing under Rs. 1 (place_order refuses it too).
+  const cardAvailable = cardReady && (q ? q.total >= 1 : true);
   const bankAccount = bankAccountFromSettings(settings);
   const fulfillment: OrderFulfillment = values.fulfillment === "pickup" && pickupAvailable ? "pickup" : "delivery";
   const paymentMethod: PaymentMethod | "" =
@@ -174,11 +181,15 @@ export function CheckoutClient({
       ? "cod"
       : values.paymentMethod === "bank_transfer" && bankAvailable
         ? "bank_transfer"
-        : codAvailable
-          ? "cod"
-          : bankAvailable
-            ? "bank_transfer"
-            : "";
+        : values.paymentMethod === "card" && cardAvailable
+          ? "card"
+          : codAvailable
+            ? "cod"
+            : bankAvailable
+              ? "bank_transfer"
+              : cardAvailable
+                ? "card"
+                : "";
   const codCapped = settings.codEnabled && settings.codMaxTotal !== null && !codAvailable;
 
   // Blueprint §9.4: on mount, a code the assistant parked is taken (read-and-clear) to PREFILL the
@@ -310,7 +321,8 @@ export function CheckoutClient({
     }
 
     if (response.ok && payload?.ok) {
-      setPlaced(payload.orderId && payload.viewToken ? "redirecting" : "placed");
+      const payNow = payload.paymentMethod === "card" && Boolean(payload.orderId && payload.viewToken);
+      setPlaced(payNow ? "paying" : payload.orderId && payload.viewToken ? "redirecting" : "placed");
       if (payload.orderId) {
         saveLastOrder({
           orderId: payload.orderId,
@@ -331,7 +343,13 @@ export function CheckoutClient({
       setQuoteDiscountCode(null);
       resetCheckoutCartId();
       if (payload.orderId && payload.viewToken) {
-        router.replace(`/order/${encodeURIComponent(payload.orderId)}?t=${encodeURIComponent(payload.viewToken)}`);
+        const orderUrl = `/order/${encodeURIComponent(payload.orderId)}?t=${encodeURIComponent(payload.viewToken)}`;
+        // Card: a real page load (not a client-side route change), so the order page's own CSP —
+        // the one that lets its payment form go to WebXPay — is the page's policy. It starts the
+        // payment because of `pay=1`, then removes the flag, so Back from WebXPay lands on the order
+        // page without starting again.
+        if (payNow) window.location.replace(`${orderUrl}&pay=1`);
+        else router.replace(orderUrl);
       }
       return;
     }
@@ -354,7 +372,11 @@ export function CheckoutClient({
   if (placed) {
     return (
       <Notice tone="success" title="Order placed">
-        {placed === "redirecting" ? "Taking you to your order confirmation…" : "Thank you — your order is in. Your confirmation email has the details."}
+        {placed === "paying"
+          ? "Taking you to the card payment…"
+          : placed === "redirecting"
+            ? "Taking you to your order confirmation…"
+            : "Thank you — your order is in. Your confirmation email has the details."}
       </Notice>
     );
   }
@@ -376,7 +398,7 @@ export function CheckoutClient({
     );
   }
 
-  const noPayment = !codAvailable && !bankAvailable;
+  const noPayment = !codAvailable && !bankAvailable && !cardAvailable;
   const canSubmit = !noPayment && !(quote.fresh && q !== null && !q.orderable);
 
   return (
@@ -397,7 +419,14 @@ export function CheckoutClient({
             <Field label="First name" required error={errors.firstName} id={FIELD_IDS.firstName}>
               <Input name="given-name" autoComplete="given-name" maxLength={CHECKOUT_LIMITS.name} value={values.firstName} onChange={(e) => update("firstName", e.target.value)} />
             </Field>
-            <Field label="Last name" optional error={errors.lastName} id={FIELD_IDS.lastName}>
+            <Field
+              label="Last name"
+              optional={paymentMethod !== "card"}
+              required={paymentMethod === "card"}
+              error={errors.lastName}
+              id={FIELD_IDS.lastName}
+              hint={paymentMethod === "card" ? "Needed for card payment." : undefined}
+            >
               <Input name="family-name" autoComplete="family-name" maxLength={CHECKOUT_LIMITS.name} value={values.lastName} onChange={(e) => update("lastName", e.target.value)} />
             </Field>
           </div>
@@ -529,6 +558,18 @@ export function CheckoutClient({
                     }
                   />
                 )}
+                {cardAvailable && (
+                  <RadioCard
+                    id={codAvailable || bankAvailable ? "checkout-payment-card" : FIELD_IDS.paymentMethod}
+                    name="paymentMethod"
+                    value="card"
+                    checked={paymentMethod === "card"}
+                    onChange={() => update("paymentMethod", "card")}
+                    icon={<CreditCard className="size-4" />}
+                    title="Card payment"
+                    description="Pay online with your debit or credit card on WebXPay's payment page, straight after you place the order."
+                  />
+                )}
               </div>
               {errors.paymentMethod && (
                 <p id="checkout-payment-error" role="alert" className="mt-2 text-xs text-ink">
@@ -543,7 +584,13 @@ export function CheckoutClient({
           {codCapped && settings.codMaxTotal !== null && (
             <Notice tone="info" title="Cash on delivery limit">
               Cash on delivery is available for orders up to <Price amount={settings.codMaxTotal} className="font-mono font-semibold" />.
-              {bankAvailable ? " Please pay by bank transfer for this order." : ""}
+              {bankAvailable && cardAvailable
+                ? " Please pay by bank transfer or card for this order."
+                : bankAvailable
+                  ? " Please pay by bank transfer for this order."
+                  : cardAvailable
+                    ? " Please pay by card for this order."
+                    : ""}
             </Notice>
           )}
           {paymentMethod === "bank_transfer" &&
@@ -563,6 +610,12 @@ export function CheckoutClient({
                 Place your order first — the next page shows our bank details, the amount and your order number to use as the payment reference.
               </Notice>
             ))}
+          {paymentMethod === "card" && (
+            <Notice tone="info" title="Card payment">
+              When you continue, we save your order and take you to WebXPay&apos;s payment page to pay the total. We never see your card number. Your order is confirmed as soon as
+              the payment goes through.
+            </Notice>
+          )}
         </section>
 
         <section aria-labelledby="checkout-note" className="space-y-5">
@@ -587,6 +640,7 @@ export function CheckoutClient({
           promoError={promoError}
           highlightVariantId={highlight}
           policies={policies}
+          payByCard={paymentMethod === "card"}
         />
       </div>
     </div>

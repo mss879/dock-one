@@ -26,10 +26,13 @@ type Props = { params: Promise<{ id: string }>; searchParams: Promise<Record<str
  * applies the same per-IP limit as /api/track (15 / 15 min) on top of view_order's own in-DB
  * throttle, and a wrong/missing token or unknown order is a REAL 404. A database blip shows the
  * sessionStorage copy kept by the checkout instead of an error.
+ * Card orders awaiting payment show the WebXPay payment panel; `&pay=1` (the checkout's hand-off)
+ * starts the payment at once. This is the one page whose CSP lets a form leave the site
+ * (next.config.ts) — the payment form goes to WebXPay from here.
  */
 export default async function OrderPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { t } = await searchParams;
+  const { t, pay } = await searchParams;
   const orderId = typeof id === "string" ? id.trim().toUpperCase() : "";
   const token = typeof t === "string" ? t.trim() : "";
   // A malformed token is never sent to the database (a non-UUID fails with 22P02 there).
@@ -81,7 +84,11 @@ export default async function OrderPage({ params, searchParams }: Props) {
   return (
     <main id="main" className="shell pt-8 pb-24 lg:pt-12">
       {crumbs}
-      <OrderConfirmation order={order} openingHours={settings.openingHours} />
+      <OrderConfirmation
+        order={order}
+        openingHours={settings.openingHours}
+        card={{ token, ready: settings.cardPaymentsEnabled, autoStart: pay === "1" }}
+      />
     </main>
   );
 }

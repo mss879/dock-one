@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, BadgeCheck, Banknote, Landmark, MessageCircle, RotateCcw, type LucideIcon } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Banknote, CreditCard, Landmark, MessageCircle, RotateCcw, type LucideIcon } from "lucide-react";
 import { useStoreSettings } from "@/components/providers/StoreSettingsProvider";
 import { cart, useCart } from "@/lib/cart";
 import { bankTransferReady, phoneDigits } from "@/lib/settings-shared";
@@ -66,6 +66,7 @@ export function BasketView() {
   const assurances: Assurance[] = [];
   if (codOk) assurances.push({ icon: Banknote, label: "Cash on delivery available" });
   if (bankOk) assurances.push({ icon: Landmark, label: "Bank transfer available" });
+  if (settings.cardPaymentsEnabled) assurances.push({ icon: CreditCard, label: "Card payment available" });
   assurances.push({ icon: BadgeCheck, label: "Official manufacturer warranty" });
   if (settings.returnsWindowDays > 0) assurances.push({ icon: RotateCcw, label: `${settings.returnsWindowDays}-day easy returns` });
 

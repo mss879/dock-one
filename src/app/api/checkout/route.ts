@@ -18,6 +18,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { formatLKR } from "@/lib/format";
 import { json, MESSAGES } from "@/lib/http";
 import { getPaymentProvider } from "@/lib/payments";
+import { isWebxpayReady } from "@/lib/payments/webxpay";
 import { bucket, checkRateLimit, ipBucket } from "@/lib/rate-limit";
 import { cleanLine, isBot, isEmailAddress, isPlainObject, isUuid, readJsonBody } from "@/lib/request-guard";
 import { logDbError, mapRpcError, parseDbError, type ErrorTable } from "@/lib/rpc-errors";
@@ -33,7 +34,9 @@ import { createSessionSupabase } from "@/lib/supabase/session";
  *   3. validate (lib/checkout.ts — the same schema the form uses) · payment provider
  *   4. ONE RPC: place_order with the SESSION client, so a signed-in buyer's auth.uid() links it
  *   5. the full error map (409 stock/product, 422 validation, 503 unavailable / migration)
- *   6. fail-soft emails AFTER the commit: confirmation to the shopper + owner alert, each isolated
+ *   6. fail-soft emails AFTER the commit: confirmation to the shopper + owner alert, each isolated —
+ *      except for a CARD order, which is placed unpaid: its two emails go out when WebXPay's signed
+ *      answer marks it paid (/api/payments/webxpay/webhook), so an abandoned payment mails nobody
  * The client sends WHAT it wants (ids, quantities, a code, a payment METHOD); SQL decides every
  * price, fee, discount, payment status and the order number (P1).
  */
@@ -136,6 +139,12 @@ export async function POST(request: NextRequest) {
 
   const provider = getPaymentProvider(order.paymentMethod);
   if (!provider) return fail(CHECKOUT_COPY.unsupportedPayment, 422, "unsupported_payment_method", { field: "paymentMethod" });
+  // Card needs the WebXPay keys on THIS server too (the owner's switch is checked by place_order),
+  // and a last name: WebXPay's payment page refuses a payer without one.
+  if (provider.method === "card" && !isWebxpayReady()) {
+    return fail(CHECKOUT_COPY.unsupportedPayment, 422, "unsupported_payment_method", { field: "paymentMethod" });
+  }
+  if (provider.method === "card" && !order.lastName) return fail(CHECKOUT_COPY.lastNameForCard, 422, "invalid_name", { field: "lastName" });
 
   const items = parseCheckoutItems(order.items);
   if (items.length === 0) return fail(CHECKOUT_COPY.invalidItems, 422, "invalid_items", { field: "items" });
@@ -210,8 +219,10 @@ export async function POST(request: NextRequest) {
   }
 
   // 6. fail-soft side effects, each isolated: the order exists whether or not mail works (P5).
+  //    A card order is not paid yet: lib/payments/notify.ts mails both once WebXPay confirms it.
   const placed = placedOrderFromRpc(data);
-  if (placed) {
+  const awaitingCard = provider.method === "card";
+  if (placed && !awaitingCard) {
     const settings = await getStoreSettings();
     const owner = getOwnerNotificationAddress();
     const send = async (label: string, build: () => EmailMessage) => {
@@ -227,7 +238,7 @@ export async function POST(request: NextRequest) {
       send("confirmation", () => orderConfirmationEmail(placed, settings)),
       owner ? send("owner alert", () => ownerOrderAlertEmail(placed, settings, owner)) : Promise.resolve(),
     ]);
-  } else {
+  } else if (!placed) {
     console.error("[api/checkout] order placed but the email payload could not be built — no emails sent");
   }
 
