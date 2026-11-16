@@ -5,6 +5,10 @@
 #   between builds and is never published to visitors, so it is left out of the scan.
 # - The three email-address variables are public (shown on the site and in every email the shop
 #   sends), so they are never treated as secrets either.
+# - Card payments (WebXPay): the public key is public by design, the merchant number is an account
+#   number, and the API username is text the site itself shows — none is a secret, and the username
+#   would otherwise be "found" all over the built pages. The real secrets (PAYMENTS_SECRET,
+#   WEBXPAY_SECRET_KEY, WEBXPAY_API_PASSWORD) stay scanned.
 [build.environment]
   SECRETS_SCAN_OMIT_PATHS = ".next/cache/**,.netlify/.next/cache/**"
-  SECRETS_SCAN_OMIT_KEYS = "RESEND_FROM_EMAIL,RESEND_REPLY_TO,ORDER_NOTIFICATION_EMAIL"
+  SECRETS_SCAN_OMIT_KEYS = "RESEND_FROM_EMAIL,RESEND_REPLY_TO,ORDER_NOTIFICATION_EMAIL,WEBXPAY_PUBLIC_KEY,WEBXPAY_MERCHANT_NUMBER,WEBXPAY_API_USERNAME"
