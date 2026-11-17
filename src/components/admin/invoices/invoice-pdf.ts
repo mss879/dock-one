@@ -2,11 +2,12 @@ import { canvasJpeg, jpegPagesToPdf, type PdfJpegPage } from "@/lib/admin/pdf";
 import { INVOICE_STYLES, invoiceDocumentTitle, renderInvoiceHtml, type InvoiceDocumentInput } from "./invoice-document";
 
 /**
- * The invoice as a PDF FILE, made in the browser — for sending on WhatsApp, where a file is needed
- * (printing / "Save as PDF" stays the way to get a text PDF). The same renderer as the preview and
- * the printout draws the invoice in a hidden frame (only the invoice's own styles), html2canvas
- * turns it into a picture at twice screen resolution, and each A4 page becomes one JPEG page of
- * the PDF. A long invoice is cut between item rows or sections, never through a line.
+ * The invoice (or its delivery note, 57) as a PDF FILE, made in the browser — for sending on
+ * WhatsApp, where a file is needed (printing / "Save as PDF" stays the way to get a text PDF). The
+ * same renderer as the preview and the printout draws the document in a hidden frame (only its own
+ * styles), html2canvas turns it into a picture at twice screen resolution, and each A4 page becomes
+ * one JPEG page of the PDF. A long document is cut between item rows or sections, never through a
+ * line.
  */
 
 const PX_PER_MM = 96 / 25.4;
@@ -15,6 +16,8 @@ const PAGE_H = 297 * PX_PER_MM;
 const SCALE = 2;
 /** html2canvas draws small, letter-spaced text a little low: lift the footer band's words. */
 const CAPTURE_STYLES = ".inv-footer .n { padding-bottom: 0.9mm; }";
+/** Where a page may end: the top of an item row or a section of the sheet. */
+const INVOICE_BREAKS = ".inv-items tbody tr, .inv-summary, .inv-notes, .inv-notes li, .inv-sign, .inv-closing, .inv-footer";
 /** Margins of the pages after the first (the first page has the sheet's own padding). */
 const NEXT_TOP = 10 * PX_PER_MM;
 const NEXT_BOTTOM = 8 * PX_PER_MM;
@@ -70,7 +73,7 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 
 function waitForLoad(frame: HTMLIFrameElement): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("The invoice took too long to draw.")), 15_000);
+    const timer = window.setTimeout(() => reject(new Error("The document took too long to draw.")), 15_000);
     frame.addEventListener(
       "load",
       () => {
@@ -88,24 +91,48 @@ export function invoicePdfFilename(input: Pick<InvoiceDocumentInput, "form">): s
   return `${what} ${input.form.number ?? "draft"}.pdf`.replace(/[^A-Za-z0-9 ._()-]+/g, "");
 }
 
-export async function renderInvoicePdf(input: Omit<InvoiceDocumentInput, "placeholders">): Promise<{ bytes: Uint8Array; filename: string }> {
+export function renderInvoicePdf(input: Omit<InvoiceDocumentInput, "placeholders">): Promise<{ bytes: Uint8Array; filename: string }> {
+  return renderSheetPdf({
+    body: renderInvoiceHtml({ ...input, placeholders: false }).value,
+    styles: INVOICE_STYLES,
+    title: invoiceDocumentTitle(input.form),
+    filename: invoicePdfFilename(input),
+  });
+}
+
+/**
+ * Any A4 document drawn with the invoice sheet (`.inv-sheet`) as a PDF: `body` is escaped markup
+ * from a document renderer, `styles` its stylesheet, `breaks` the elements a page may end at.
+ */
+export async function renderSheetPdf({
+  body,
+  styles,
+  title,
+  filename,
+  breaks = INVOICE_BREAKS,
+}: {
+  body: string;
+  styles: string;
+  title: string;
+  filename: string;
+  breaks?: string;
+}): Promise<{ bytes: Uint8Array; filename: string }> {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.tabIndex = -1;
-  frame.title = "Invoice PDF";
+  frame.title = title;
   // Inside the viewport but invisible: browsers may stop drawing frames placed off-screen.
   Object.assign(frame.style, { position: "fixed", left: "0", top: "0", width: `${PAGE_W}px`, height: `${Math.ceil(PAGE_H)}px`, border: "0", opacity: "0", pointerEvents: "none", zIndex: "-1" });
-  const body = renderInvoiceHtml({ ...input, placeholders: false }).value;
-  frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}${INVOICE_STYLES}${CAPTURE_STYLES}</style></head><body>${body}</body></html>`;
+  frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}${styles}${CAPTURE_STYLES}</style></head><body>${body}</body></html>`;
   const loaded = waitForLoad(frame);
   document.body.appendChild(frame);
   try {
     await loaded;
     const doc = frame.contentDocument;
     const sheet = doc?.querySelector<HTMLElement>(".inv-sheet");
-    if (!doc || !sheet) throw new Error("The invoice couldn't be drawn.");
+    if (!doc || !sheet) throw new Error("The document couldn't be drawn.");
     await Promise.all(Array.from(doc.images).map((img) => imageReady(img)));
-    await withTimeout(doc.fonts?.ready ?? Promise.resolve(), 5000, "The invoice's fonts didn't load.").catch(() => undefined);
+    await withTimeout(doc.fonts?.ready ?? Promise.resolve(), 5000, "The document's fonts didn't load.").catch(() => undefined);
     const total = Math.ceil(sheet.getBoundingClientRect().height);
     frame.style.height = `${total}px`;
 
@@ -113,11 +140,11 @@ export async function renderInvoicePdf(input: Omit<InvoiceDocumentInput, "placeh
     const canvas = await withTimeout(
       html2canvas(sheet, { scale: SCALE, backgroundColor: "#ffffff", logging: false, useCORS: true, windowWidth: PAGE_W, windowHeight: total }),
       45_000,
-      "The invoice took too long to draw.",
+      "The document took too long to draw.",
     );
 
     const top = sheet.getBoundingClientRect().top;
-    const breaks = Array.from(doc.querySelectorAll(".inv-items tbody tr, .inv-summary, .inv-notes, .inv-notes li, .inv-sign, .inv-closing, .inv-footer"))
+    const cuts = Array.from(doc.querySelectorAll(breaks))
       .map((el) => el.getBoundingClientRect().top - top)
       .filter((y) => y > 0)
       .sort((a, b) => a - b);
@@ -125,12 +152,12 @@ export async function renderInvoicePdf(input: Omit<InvoiceDocumentInput, "placeh
     const pages: PdfJpegPage[] = [];
     const pageW = canvas.width;
     const pageH = Math.round(PAGE_H * SCALE);
-    for (const [from, to] of pageSlices(total, breaks)) {
+    for (const [from, to] of pageSlices(total, cuts)) {
       const page = document.createElement("canvas");
       page.width = pageW;
       page.height = pageH;
       const ctx = page.getContext("2d");
-      if (!ctx) throw new Error("The invoice couldn't be drawn.");
+      if (!ctx) throw new Error("The document couldn't be drawn.");
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, pageW, pageH);
       const sy = Math.round(from * SCALE);
@@ -139,7 +166,7 @@ export async function renderInvoicePdf(input: Omit<InvoiceDocumentInput, "placeh
       if (sh > 0) ctx.drawImage(canvas, 0, sy, pageW, sh, 0, dy, pageW, sh);
       pages.push({ jpeg: await canvasJpeg(page, 0.9), width: pageW, height: pageH });
     }
-    return { bytes: jpegPagesToPdf(pages, { title: invoiceDocumentTitle(input.form), author: "Dock One Solutions" }), filename: invoicePdfFilename(input) };
+    return { bytes: jpegPagesToPdf(pages, { title, author: "Dock One Solutions" }), filename };
   } finally {
     frame.remove();
   }

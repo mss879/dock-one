@@ -267,7 +267,7 @@ export default function InvoicesTab() {
                 setSearch(value);
                 setPage(1);
               },
-              placeholder: "Invoice no., client, phone, serial no., PO or order",
+              placeholder: "Invoice no., client, phone, serial no., PO, order or dealer",
               label: "Search invoices",
             }}
             filters={
@@ -337,6 +337,7 @@ export default function InvoicesTab() {
                 <span className="flex min-w-[11rem] flex-col">
                   <span className="truncate font-semibold text-adm-ink">{row.billToName || <span className="font-normal text-adm-mute">No client yet</span>}</span>
                   <span className="truncate text-xs text-adm-mute">{[row.billToPhone, row.billToEmail].filter(Boolean).join(" · ")}</span>
+                  {row.dealerName && <span className="truncate text-xs text-adm-ink-2">Dealer: {row.dealerName}</span>}
                 </span>
               ),
             },

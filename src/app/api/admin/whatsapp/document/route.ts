@@ -7,11 +7,14 @@ import { recordOutbound, whatsappCredentials, whatsappRoute, whatsappWindow } fr
 
 /**
  * POST /api/admin/whatsapp/document (multipart) — "Send on WhatsApp" on an invoice: the invoice PDF
- * (made in the browser from the same layout as the printed invoice) goes to the customer.
- *   file (PDF ≤ 8 MB), to, name?, invoice_id, invoice_number, caption?, filename
+ * (made in the browser from the same layout as the printed invoice) goes to the customer — or the
+ * invoice's delivery note (57).
+ *   file (PDF ≤ 8 MB), to, name?, invoice_id, invoice_number, caption?, filename,
+ *   doc_kind? ("invoice" | "delivery_note"), doc_number? (the delivery note's number)
  * Within 24 hours of the customer's last message it goes as a document with the caption; outside
- * it, as the approved invoice template set in admin → WhatsApp (a DOCUMENT header; body {{1}} the
- * customer's name, {{2}} the invoice number).
+ * it, an invoice goes as the approved invoice template set in admin → WhatsApp (a DOCUMENT header;
+ * body {{1}} the customer's name, {{2}} the invoice number). That template is worded for invoices,
+ * so a delivery note is sent only inside the 24 hours.
  * Gate: the owner, or staff with Invoices → edit or WhatsApp → edit.
  */
 
@@ -40,15 +43,28 @@ export async function POST(request: NextRequest) {
   const name = cleanLine(form.get("name"), 120) || null;
   const invoiceId = toInt(form.get("invoice_id"), 1, 2147483647);
   const invoiceNumber = cleanLine(form.get("invoice_number"), 40);
+  const deliveryNote = String(form.get("doc_kind") ?? "invoice") === "delivery_note";
+  const docNumber = deliveryNote ? cleanLine(form.get("doc_number"), 40) : invoiceNumber;
+  const docLabel = deliveryNote ? "Delivery note" : "Invoice";
   const caption = cleanText(form.get("caption"), 1024);
-  const filename = (cleanLine(form.get("filename"), 120).replace(/[^A-Za-z0-9 ._()-]+/g, "").trim() || `${invoiceNumber || "Invoice"}`).replace(/(\.pdf)?$/i, ".pdf");
-  if (invoiceId === null || !invoiceNumber) return json({ error: MESSAGES.invalid }, 422);
+  const filename = (cleanLine(form.get("filename"), 120).replace(/[^A-Za-z0-9 ._()-]+/g, "").trim() || `${docNumber || docLabel}`).replace(/(\.pdf)?$/i, ".pdf");
+  if (invoiceId === null || !invoiceNumber || !docNumber) return json({ error: MESSAGES.invalid }, 422);
 
   const window = await whatsappWindow(route.supabase, to, SCOPE);
   if (!window.ok) return window.response;
   const keys = await whatsappCredentials(route.supabase, SCOPE);
   if (!keys.ok) return keys.response;
   const useTemplate = !window.window.open;
+  if (useTemplate && deliveryNote) {
+    return json(
+      {
+        error:
+          "This customer hasn't messaged you in the last 24 hours, so WhatsApp only allows an approved template — and the invoice template is for invoices. Use “Share / download PDF”, or ask the customer to send you a message first.",
+        code: "window_closed",
+      },
+      409,
+    );
+  }
   if (useTemplate && !keys.creds.invoiceTemplate) {
     return json(
       {
@@ -68,7 +84,7 @@ export async function POST(request: NextRequest) {
       media_filename: filename,
       media_mime: "application/pdf",
       kind: useTemplate ? "template" : "document",
-      body: useTemplate ? `Invoice ${invoiceNumber} (template “${keys.creds.invoiceTemplate}”)` : caption || `Invoice ${invoiceNumber}`,
+      body: useTemplate ? `Invoice ${invoiceNumber} (template “${keys.creds.invoiceTemplate}”)` : caption || `${docLabel} ${docNumber}`,
       ...p,
     });
 

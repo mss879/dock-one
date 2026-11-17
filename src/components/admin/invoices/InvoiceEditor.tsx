@@ -14,9 +14,10 @@ import {
   Save,
   Settings2,
   Trash2,
+  Truck,
   X,
 } from "lucide-react";
-import { useDeferredValue, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
 import { useAdminAccess } from "@/components/admin/access";
 import {
   AdminButton,
@@ -37,6 +38,7 @@ import {
   useConfirm,
 } from "@/components/admin/ui";
 import { addDays, todayYmd } from "@/lib/admin/dates";
+import { DELIVERY_NOTES_MIGRATION, fetchDeliveryNote } from "@/lib/admin/delivery-notes";
 import {
   buildDocSave,
   buildInvoiceSave,
@@ -46,12 +48,14 @@ import {
   computeTotals,
   CREDIT_DAY_CHOICES,
   creditDueDate,
+  dealerCommissionAmount,
   dueHint,
   duplicateForm,
   emptyInvoiceForm,
   FALLBACK_INVOICE_SETTINGS,
   fetchInvoice,
   fetchInvoicesForOrder,
+  fetchDealerNames,
   fetchInvoiceSettings,
   fetchOrderPrefill,
   fetchStaffNames,
@@ -61,6 +65,7 @@ import {
   formatRs,
   fromRpcResult,
   hasContent,
+  INVOICE_LIMITS,
   INVOICE_STOCK_WRITE,
   INVOICE_WRITE,
   INVOICES_MIGRATION,
@@ -92,7 +97,9 @@ import { setAdminParams } from "@/lib/admin/url";
 import { adminRpc } from "@/lib/admin/write";
 import { bankAccountFromSettings, normalizeStoreSettings } from "@/lib/settings-shared";
 import { ClientPicker } from "./ClientPicker";
+import { DeliveryNoteDrawer } from "./DeliveryNoteDrawer";
 import { INVOICE_LOGO_PATH, invoiceDocumentTitle, printInvoice, renderInvoiceHtml } from "./invoice-document";
+import { renderInvoicePdf } from "./invoice-pdf";
 import { WhatsappSendDialog } from "./WhatsappSendDialog";
 import { InvoicePreview } from "./InvoicePreview";
 import { LineItems } from "./LineItems";
@@ -264,6 +271,8 @@ export function InvoiceEditor({
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [templateOpen, setTemplateOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const dealerListId = useId();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [dialog, setDialog] = useState<null | "issue" | "revert" | "void" | "delete" | "convert">(null);
   const [voidReason, setVoidReason] = useState("");
@@ -340,6 +349,17 @@ export function InvoiceEditor({
   const staffNames = useAdminQuery(({ supabase, signal }) => fetchStaffNames(supabase, signal), ["admin-staff-names"], {
     enabled: Boolean(form?.extrasSupported) && form?.docType === "invoice",
   });
+  // The dealer names already used (57) — the Dealer field's suggestions.
+  const dealerNames = useAdminQuery(({ supabase, signal }) => fetchDealerNames(supabase, signal), ["admin-dealer-names"], {
+    enabled: Boolean(form?.dealerSupported) && form?.docType === "invoice",
+  });
+  // The invoice's delivery note (57): issued (or void) invoices only.
+  const noteInvoiceId = form && form.docType === "invoice" && form.status !== "draft" && form.id != null && form.dealerSupported ? form.id : null;
+  const deliveryQuery = useAdminQuery(({ supabase, signal }) => fetchDeliveryNote(supabase, noteInvoiceId as number, signal), ["delivery-note", noteInvoiceId], {
+    enabled: noteInvoiceId != null,
+    migration: DELIVERY_NOTES_MIGRATION,
+  });
+  const deliveryNote = noteInvoiceId == null || deliveryQuery.loading || deliveryQuery.error ? undefined : (deliveryQuery.data ?? null);
 
   // The serial-number register for the products on the invoice (hints and in-stock suggestions).
   const productIds = form ? [...new Set(form.lines.map((l) => l.productId).filter((id): id is number => id != null))].sort((a, b) => a - b) : [];
@@ -788,6 +808,17 @@ export function InvoiceEditor({
                 WhatsApp
               </AdminButton>
             )}
+            {!quote && (issued || (voided && deliveryNote)) && form.id != null && form.number != null && (
+              <AdminButton
+                size="sm"
+                icon={<Truck aria-hidden className="size-3.5" />}
+                onClick={() => setDeliveryOpen(true)}
+                title={deliveryNote ? `Delivery note ${deliveryNote.number}` : "Make a delivery note when the items are delivered"}
+              >
+                Delivery note
+                {deliveryNote && <span className="hidden font-mono 2xl:inline">· {deliveryNote.number}</span>}
+              </AdminButton>
+            )}
             {draft && form.id != null && form.number == null && access.isAdmin && (
               <AdminButton size="sm" variant="ghost" icon={<Trash2 aria-hidden className="size-3.5" />} onClick={() => setDialog("delete")}>
                 <span className="hidden 2xl:inline">Delete</span>
@@ -1023,8 +1054,68 @@ export function InvoiceEditor({
                         <Input readOnly value={nameOf(form.salesStaffId) ?? creator ?? "Whoever made it"} />
                       )}
                     </Field>
-                    <Field label="BONUS (internal)" optional hint="Never printed. Added to the sales staff's commission total (Reports → Staff commission).">
+                    <Field label="BONUS (internal)" optional hint="Never printed. Added to the sales staff's commission total (Reports → Commission).">
                       <MoneyInput value={form.bonus} allowCents max={100_000_000} disabled={isVoid || !access.isAdmin} onChange={(bonus) => update({ bonus })} />
+                    </Field>
+                  </>
+                );
+              })()}
+              {!quote && form.dealerSupported && (() => {
+                // 57: the dealer who sent the customer and their commission — anyone who edits the invoice.
+                const percent = form.dealerCommissionType === "percent";
+                const value = form.dealerCommissionValue ?? 0;
+                const amount = dealerCommissionAmount(form);
+                return (
+                  <>
+                    <Field label="Dealer (internal)" optional error={fieldError("dealerName")} hint="The dealer who sent this customer, if one did. Never printed — for reference here, in the invoices list and in Reports → Commission.">
+                      <Input
+                        list={dealerListId}
+                        value={form.dealerName}
+                        maxLength={INVOICE_LIMITS.dealerName}
+                        disabled={isVoid}
+                        placeholder="No dealer"
+                        autoComplete="off"
+                        onChange={(e) => update({ dealerName: e.target.value })}
+                      />
+                      <datalist id={dealerListId}>
+                        {(dealerNames.data ?? []).map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
+                    </Field>
+                    <Field
+                      label="Dealer commission (internal)"
+                      optional
+                      error={fieldError("dealerCommission")}
+                      hint={
+                        percent && value > 0
+                          ? `${formatRs(amount)} — ${value}% of the sales before VAT / tax, after discounts. Never printed.`
+                          : "In rupees, or a % of the sales before VAT / tax and after discounts. Never printed; Reports → Commission adds it up per dealer."
+                      }
+                    >
+                      <div className="flex gap-2">
+                        <Segmented
+                          label="Dealer commission as"
+                          value={form.dealerCommissionType}
+                          disabled={isVoid}
+                          options={[
+                            { value: "percent", label: "%" },
+                            { value: "amount", label: "Rs." },
+                          ]}
+                          onChange={(dealerCommissionType) => update({ dealerCommissionType })}
+                        />
+                        <NumberInput
+                          value={form.dealerCommissionValue}
+                          integer={false}
+                          min={0}
+                          max={percent ? 100 : 100_000_000}
+                          disabled={isVoid}
+                          suffix={percent ? "%" : "LKR"}
+                          format={(n) => n.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                          onChange={(dealerCommissionValue) => update({ dealerCommissionValue })}
+                          className="flex-1"
+                        />
+                      </div>
                     </Field>
                   </>
                 );
@@ -1409,8 +1500,36 @@ export function InvoiceEditor({
           open={whatsappOpen}
           onClose={() => setWhatsappOpen(false)}
           invoiceId={form.id}
-          document={{ form, settings: effectiveSettings, bank, logoUrl, paidOn: lastPaidOn }}
+          document={{
+            kind: "invoice",
+            number: form.number,
+            label: "Invoice",
+            invoiceNumber: form.number,
+            phone: form.billToPhone,
+            name: form.billToName,
+            makePdf: () => renderInvoicePdf({ form, settings: effectiveSettings, bank, logoUrl, paidOn: lastPaidOn }),
+          }}
           canSend={access.can("invoices", "edit") || access.can("whatsapp", "edit")}
+        />
+      )}
+
+      {!quote && form.id != null && form.number != null && form.status !== "draft" && (
+        <DeliveryNoteDrawer
+          open={deliveryOpen}
+          onClose={() => setDeliveryOpen(false)}
+          invoice={form}
+          settings={effectiveSettings}
+          logoUrl={logoUrl}
+          note={form.dealerSupported ? deliveryNote : null}
+          loading={deliveryQuery.loading}
+          error={deliveryQuery.missingMigration ? null : deliveryQuery.error}
+          onRetry={deliveryQuery.refetch}
+          missingMigration={form.dealerSupported ? deliveryQuery.missingMigration : DELIVERY_NOTES_MIGRATION}
+          canEdit={canEdit}
+          isOwner={access.isAdmin}
+          canSendWhatsapp={access.can("invoices", "edit") || access.can("whatsapp", "edit")}
+          onSaved={(saved) => deliveryQuery.mutate(() => saved)}
+          onDeleted={() => deliveryQuery.mutate(() => null)}
         />
       )}
 

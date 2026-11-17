@@ -81,6 +81,17 @@ what to do right after, and how to check it worked.
 > the client's **quotation notes** (11 notes; quotations valid 7 days). Re-run 50 after any re-run
 > of 05, 09 or 49; 53 after 39, 40 or 44; 54 after 39.
 
+> **Added 2026-11-17 (later) — one new file: run 57** (safe to re-run; needs 01–56, any time, before
+> or after the deploy): the client's two invoicing requests. **Dealer commission** — when a dealer
+> sends a customer, the invoice records the dealer and their commission (in rupees, or a % of the
+> sale before VAT / tax), shown only in the admin — never on the customer's invoice or its WhatsApp
+> PDF — and added up per dealer in Reports → Commission. **Delivery notes** — any issued invoice can
+> make one delivery note (DN-0001, DN-0002…) confirming its products were delivered, printed or sent
+> on WhatsApp like the invoice; walk-in sales simply don't make one. 57 replaces two of 53's
+> functions, so **re-run 57 after any re-run of 53** (and so after 39, 40 or 44). Before 57 runs the
+> new code works as before: the invoice editor shows no dealer fields, "Delivery note" says to run
+> 57, and Reports → Commission shows staff commission only.
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -723,7 +734,8 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   `admin_set_staff_commission`, `admin_staff_names` and the owner-only
   `admin_staff_commission_report` (sales before VAT / tax after discounts × the person's %, plus
   bonuses).
-- **Needs:** 26, 28, 39, 40, 44. Run again after any re-run of 39, 40 or 44.
+- **Needs:** 26, 28, 39, 40, 44. Run again after any re-run of 39, 40 or 44 — and then run 57 again
+  (57 replaces `admin_save_document` and `admin_staff_commission_report` from 53's versions).
 - **Switches on:** invoice editor → "Print signature lines", **BONUS (internal)** and **Sales staff**
   (owner) under Invoice details; Template & numbering → the default; Staff → **Commission %**;
   Reports → **Staff commission**. Before 53 the editor works as now.
@@ -768,6 +780,45 @@ for the hero phone images, invoice payment types, expenses and the real contact 
   notes under NOTES and is valid 7 days. Quotations already made keep their own notes. Both stay
   editable: open a quotation in the admin → Template.
 - **Check:** `SELECT quote_valid_days, cardinality(quote_notes), quote_notes[1] FROM public.invoice_settings;` → 7 · 11 · "This quotation is valid for 7 days …"
+
+### 57 — Dealer commission and delivery notes · `57_dealer_commission_delivery_notes.sql`
+- **Why:** the client's two requests of 17 November 2026 — "if a dealer sends a customer and wants a
+  commission, he can have it, and it is mentioned on the invoice for easy reference", and "when staff
+  are on the way to deliver, a delivery note confirming the products are delivered can be made and
+  sent; every invoice should have this option (walk-in customers don't need it)".
+- **Adds — dealer commission:** `invoices.dealer_name` (who sent the customer; ≤ 120 characters),
+  `invoices.dealer_commission_type` (`amount` | `percent`) and `dealer_commission_value` (rupees, or a
+  % from 0 to 100 of the sales before VAT / tax and after discounts — the same base as staff
+  commission); a commission needs the dealer's name (`invoices_dealer_valid`). Internal, like the
+  BONUS: never printed on the invoice or its WhatsApp PDF (the owner's decision, 17 Nov 2026). Set by
+  anyone who can edit the invoice; on a paid invoice only the owner (53's paid = final). Replaces
+  `admin_save_document` (53's + the three dealer fields; quotations ignore them) and
+  `admin_staff_commission_report` (53's staff part unchanged, plus `dealers`, `dealer_invoices` and
+  `dealer_totals` — every issued invoice dated in the period that names a dealer, website orders
+  included); adds `admin_dealer_names()` (the names already used, for the field's suggestions).
+- **Adds — delivery notes:** `delivery_notes` (one per issued invoice: number, delivery date, deliver
+  to, contact number, delivery address, note, who made it and when; its items are the invoice's
+  lines, printed without prices), numbered from `invoice_settings.delivery_note_prefix` (`DN-`) and
+  `delivery_note_next_number` with the invoice digits → DN-0001; `admin_save_delivery_note(invoice
+  id, details)` makes or updates it (staff with Invoices → edit; it never changes the invoice, so it
+  works on paid invoices too); `admin_delete_delivery_note(invoice id)` — the owner only (a note made
+  by mistake; its number isn't reused). A void invoice keeps its delivery note on record, read-only.
+  Staff map: the table and the save function under Invoices.
+- **Needs:** 01–56 (23, 26, 28, 39, 40, 44, 53 in particular). Re-run after any re-run of 53.
+- **Switches on:** invoice editor → Invoice details → **Dealer (internal)** and **Dealer commission
+  (internal)** (% or Rs., the amount worked out beside it); the invoices list shows "Dealer: …" under
+  the client and finds invoices by dealer; Reports → **Commission** (was "Staff commission") adds the
+  dealers per dealer and per invoice, with Excel and PDF. An issued invoice gets **Delivery note**:
+  the details start from the invoice, a live A4 preview in the invoice's own layout (DELIVERY NOTE,
+  DELIVER TO, delivery note no., date, invoice no., the items without prices, the note, "Received in
+  Good Order & Condition" and "Authorised Signature"), then **Print / PDF** or **WhatsApp** (the same
+  dialog as invoices: through the store's number within 24 hours of the customer's last message — the
+  invoice template is worded for invoices, so it isn't used for delivery notes — or Share / download
+  PDF).
+- **Check:** `SELECT delivery_note_prefix, delivery_note_next_number FROM public.invoice_settings;`
+  → DN- · 1 · `SELECT count(*) FROM public.delivery_notes;` → 0 ·
+  `SELECT count(*) FROM public.staff_api_map WHERE migration = '57';` → 3 ·
+  `SELECT count(*) FROM information_schema.columns WHERE table_name = 'invoices' AND column_name LIKE 'dealer%';` → 3
 
 ---
 

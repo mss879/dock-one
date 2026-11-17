@@ -230,7 +230,7 @@ export default function StaffTab() {
         open={commissionFor != null}
         onClose={() => setCommissionFor(null)}
         title={`Commission for ${commissionFor?.name ?? "this staff member"}`}
-        description="The % of their sales (before VAT / tax, after discounts) paid as commission. Bonuses set on invoices are added on top. Leave empty for no commission. Reports → Staff commission adds it up for any dates."
+        description="The % of their sales (before VAT / tax, after discounts) paid as commission. Bonuses set on invoices are added on top. Leave empty for no commission. Reports → Commission adds it up for any dates."
         confirmLabel="Save commission"
         onConfirm={async () => {
           if (!commissionFor) return { ok: false, message: "Nothing to save." };

@@ -76,11 +76,19 @@ printed on the packing slip and invoices).
 | Homepage: every category ("Top picks by category"), the IT solutions section (52), the Instagram strip (55), new headline / description / share image | `/`; admin → Homepage & navbar → Content blocks / Instagram |
 | "People viewing" counts only live visitors, one per browser (51) | product pages |
 | Invoices: "Make it free" lines (FREE / Complimentary), signature lines, paid invoices final for staff, BONUS and Sales staff (owner), WhatsApp PDF sending (53, 54) | admin → Invoices |
-| Staff commission % and the owner-only Staff commission report (53) | admin → Staff; admin → Reports |
+| Staff commission % and the owner-only commission report (53; dealers added in 57) | admin → Staff; admin → Reports → Commission |
 | Receipts on the client's own A4 receipt template (receipt / invoice no., the customer from the invoice, method and reference, invoice total / amount received / balance due, notes, "Received by" and "Authorised Signature") and an Excel export with each receipt's invoice | admin → Receipts, an invoice → Payments |
 | The client's quotation notes (11) on every new quotation, valid 7 days (56) | admin → Quotations; `/quote` requests |
 | WhatsApp Business: keys pasted in the admin, webhook details, chats inbox with replies and templates, the AI assistant answering on WhatsApp (54) | admin → WhatsApp; `/api/whatsapp/webhook` |
 | SEO: search result preview under the product's SEO fields; Google data says PreOrder / BackOrder for those options | admin → Products; product pages |
+
+**November 2026 — the client's invoicing requests (57):** guide for the shop team:
+**`docs/client/Dock-One-Dealer-Commission-Delivery-Notes-Guide.pdf`**.
+
+| Feature | Where |
+| --- | --- |
+| Dealer commission: the dealer who sent the customer and their commission (Rs., or a % of the sales before VAT / tax and after discounts) on an invoice — internal like the BONUS, never printed on the customer's invoice or PDF; "Dealer: …" under the client in the invoices list, which finds invoices by dealer; per dealer and per invoice in the owner's Commission report (Excel / PDF) | admin → Invoices → an invoice → Invoice details; admin → Reports → Commission |
+| Delivery notes: one per issued invoice (DN-0001…), made when its items are delivered — the invoice's layout with DELIVERY NOTE, DELIVER TO, the items without prices, a note and "Received in Good Order & Condition"; print, or send on WhatsApp like the invoice; staff with Invoices → edit make them (paid invoices too); the owner can delete one made by mistake. Walk-in sales simply don't make one | admin → Invoices → an issued invoice → Delivery note |
 
 ## 2. Set it up (in this order)
 

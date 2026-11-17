@@ -9,7 +9,8 @@ import { INVOICE_SCREEN_STYLES, INVOICE_STYLES } from "./invoice-document";
  * The live A4 preview. The document is rendered into a SHADOW ROOT — its styles can't leak into
  * the admin and the admin's can't reach it — from the very markup and CSS used for printing, so
  * the preview is the PDF. Updating innerHTML is flicker-free (an iframe would reload). Scaled to
- * the column ("Fit") or 50–150 %; dashed guides show where an A4 page ends.
+ * the column ("Fit") or 50–150 %; dashed guides show where an A4 page ends. Any document drawn on
+ * the invoice sheet (`.inv-sheet`) can use it — the invoice, or its delivery note with `styles`.
  */
 
 const MM = 96 / 25.4; // CSS px per mm
@@ -17,7 +18,7 @@ const PAGE_WIDTH = 210 * MM;
 const PAGE_HEIGHT = 297 * MM;
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 
-export function InvoicePreview({ markup, label }: { markup: string; label: string }) {
+export function InvoicePreview({ markup, label, styles = INVOICE_STYLES }: { markup: string; label: string; styles?: string }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
@@ -29,13 +30,13 @@ export function InvoicePreview({ markup, label }: { markup: string; label: strin
     const host = hostRef.current;
     if (!host) return;
     const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>${INVOICE_STYLES}${INVOICE_SCREEN_STYLES}</style>${markup}`;
+    root.innerHTML = `<style>${styles}${INVOICE_SCREEN_STYLES}</style>${markup}`;
     const sheet = root.querySelector<HTMLElement>(".inv-sheet");
     if (!sheet) return;
     const observer = new ResizeObserver(() => setSheetHeight(sheet.offsetHeight || PAGE_HEIGHT));
     observer.observe(sheet);
     return () => observer.disconnect();
-  }, [markup]);
+  }, [markup, styles]);
 
   // The width the page may use.
   useEffect(() => {

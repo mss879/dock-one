@@ -28,6 +28,9 @@ export { fetchUnitsForProducts, SERIALS_MIGRATION, serialState, type SerialState
 export const INVOICES_MIGRATION = "26_invoices.sql";
 /** Quotations, receipts, website invoices, the inventory-only rule (40). */
 export const DOCS_MIGRATION = "40_sales_documents.sql";
+/** The dealer and their commission on an invoice, and delivery notes (57). */
+export const DEALER_MIGRATION = "57_dealer_commission_delivery_notes.sql";
+export const DELIVERY_NOTES_MIGRATION = DEALER_MIGRATION;
 
 /** An invoice (a sale) or a quotation (an offer: own numbers, custom lines allowed, no payments). */
 export type DocType = "invoice" | "quotation";
@@ -62,6 +65,8 @@ export const INVOICE_LIMITS = {
   /** Serial boxes shown per line (the database allows up to 200 per line). */
   serialBoxes: 50,
   warranty: 80,
+  /** 57: the dealer who referred the customer. */
+  dealerName: 120,
 } as const;
 
 export type InvoiceStatus = "draft" | "issued" | "void";
@@ -159,6 +164,7 @@ export const INVOICE_CONSTRAINTS: Record<string, string> = {
   invoice_items_text_lengths: "A line is too long (description ≤ 1,000, warranty ≤ 80 characters).",
   invoice_items_serials_valid: "A line can list one serial number per unit, each at most 100 characters.",
   invoices_number_key: "That invoice number is already used. Issue the invoice again to take the next free number.",
+  invoices_dealer_valid: "The dealer's name is at most 120 characters; a commission in % is 0–100 and in rupees at most Rs. 100,000,000, and needs the dealer's name.",
 };
 
 export const INVOICE_WRITE = {
@@ -307,6 +313,10 @@ export type InvoiceSettings = {
   /** 53: new documents print the two signature lines; signatureSupported = 53's columns exist. */
   defaultShowSignatureLines: boolean;
   signatureSupported: boolean;
+  /** 57: delivery note numbering (DN-0001, the invoice digits); dealerSupported = 57's columns exist. */
+  deliveryNotePrefix: string;
+  deliveryNoteNextNumber: number;
+  dealerSupported: boolean;
   updatedAt: string | null;
 };
 
@@ -354,6 +364,9 @@ export function normalizeInvoiceSettings(row: Row | null | undefined): InvoiceSe
     receiptNextNumber: Math.max(1, num(r.receipt_next_number, 1)),
     defaultShowSignatureLines: r.default_show_signature_lines === true,
     signatureSupported: "default_show_signature_lines" in r,
+    deliveryNotePrefix: typeof r.delivery_note_prefix === "string" ? r.delivery_note_prefix : "DN-",
+    deliveryNoteNextNumber: Math.max(1, num(r.delivery_note_next_number, 1)),
+    dealerSupported: "delivery_note_prefix" in r,
     updatedAt: strOrNull(r.updated_at),
   };
 }
@@ -445,6 +458,14 @@ export type InvoiceForm = {
   salesStaffId: string | null;
   /** 53's columns exist (the save may send them). */
   extrasSupported: boolean;
+  /** 57, invoices, internal (never printed — the owner's choice, 2026-11-17): the dealer who referred
+   *  the customer ("" = none) and their commission — in rupees, or a % of the sales before VAT / tax
+   *  and after discounts. Anyone who edits the invoice. */
+  dealerName: string;
+  dealerCommissionType: AdjustType;
+  dealerCommissionValue: number | null;
+  /** 57's columns exist (the save may send the dealer). */
+  dealerSupported: boolean;
   // ── facts the database owns (read-only here) ──
   createdBy: string | null;
   stockDeducted: boolean;
@@ -548,6 +569,10 @@ export function emptyInvoiceForm(settings: InvoiceSettings | null, today: string
     bonus: 0,
     salesStaffId: null,
     extrasSupported: settings?.signatureSupported ?? false,
+    dealerName: "",
+    dealerCommissionType: "amount",
+    dealerCommissionValue: 0,
+    dealerSupported: settings?.dealerSupported ?? false,
     createdBy: null,
     stockDeducted: false,
     amountPaid: 0,
@@ -654,6 +679,10 @@ export function formFromRows(invoice: Row, items: Row[]): InvoiceForm {
     bonus: num(invoice.bonus, 0),
     salesStaffId: strOrNull(invoice.sales_staff_id),
     extrasSupported: "show_signature_lines" in invoice,
+    dealerName: str(invoice.dealer_name),
+    dealerCommissionType: invoice.dealer_commission_type === "percent" ? "percent" : "amount",
+    dealerCommissionValue: num(invoice.dealer_commission_value, 0),
+    dealerSupported: "dealer_name" in invoice,
     createdBy: strOrNull(invoice.created_by),
     stockDeducted: invoice.stock_deducted === true,
     amountPaid: num(invoice.amount_paid, 0),
@@ -686,6 +715,7 @@ export function invoiceFingerprint(form: InvoiceForm): string {
     form.saleType, form.saleType === "credit" ? [form.upfrontAmount, form.upfrontMethod, form.creditDays] : null,
     form.lines.map((l) => [l.id, l.productId, l.variantId, l.description, cleanSerials(l.serialNumbers), l.warranty, l.quantity, l.unitPrice]),
     form.showSignatureLines, form.bonus, form.salesStaffId,
+    form.dealerName.trim(), form.dealerCommissionType, form.dealerCommissionValue,
   ]);
 }
 
@@ -751,16 +781,38 @@ export function buildInvoiceSave(form: InvoiceForm): { p_invoice: Record<string,
 
 /**
  * p_doc for admin_save_document (40): the document type and the quotation fields; once 53 is
- * applied, the signature lines — and, for the owner on an invoice, the bonus and sales staff.
+ * applied, the signature lines — and, for the owner on an invoice, the bonus and sales staff;
+ * once 57 is applied, an invoice's dealer and their commission (anyone who edits the invoice).
  */
 export function buildDocSave(form: InvoiceForm, options: { owner?: boolean } = {}): Record<string, unknown> {
+  const dealer = nullIfBlank(form.dealerName);
   return {
     doc_type: form.docType,
     bill_to_company: nullIfBlank(form.billToCompany),
     ...(form.docType === "quotation" ? { valid_until: form.validUntil || null } : {}),
     ...(form.extrasSupported ? { show_signature_lines: form.showSignatureLines } : {}),
     ...(form.extrasSupported && options.owner && form.docType === "invoice" ? { bonus: form.bonus ?? 0, sales_staff_id: form.salesStaffId } : {}),
+    ...(form.dealerSupported && form.docType === "invoice"
+      ? { dealer_name: dealer, dealer_commission_type: form.dealerCommissionType, dealer_commission_value: dealer ? (form.dealerCommissionValue ?? 0) : 0 }
+      : {}),
   };
+}
+
+/** 57: the dealer's commission in rupees — a % is of the sales before VAT / tax and after discounts
+ *  (as admin_staff_commission_report works it out). */
+export function dealerCommissionAmount(
+  form: Pick<InvoiceForm, "lines" | "discountType" | "discountValue" | "taxType" | "taxValue" | "amountPaid" | "dealerCommissionType" | "dealerCommissionValue">,
+): number {
+  if (form.dealerCommissionType !== "percent") return fromCents(toCents(form.dealerCommissionValue));
+  const totals = computeTotals(form);
+  return fromCents(percentOfCents(toCents(totals.subtotal) - toCents(totals.discountAmount), form.dealerCommissionValue));
+}
+
+/** 57 · admin_dealer_names: the dealer names already used (latest first) — the field's suggestions. */
+export async function fetchDealerNames(supabase: SupabaseClient, signal: AbortSignal): Promise<string[] | null> {
+  const { data, error } = await supabase.rpc("admin_dealer_names").abortSignal(signal);
+  if (error) return null; // 57 not applied, or no access: no suggestions
+  return (Array.isArray(data) ? data : []).filter((n): n is string => typeof n === "string" && n.trim() !== "");
 }
 
 /** The owner's and staff names (53 · admin_staff_names) — for "Sales staff". */
@@ -799,7 +851,7 @@ export function buildSaleTerms(form: InvoiceForm): Record<string, unknown> | nul
 export type LineErrors = Partial<Record<"description" | "quantity" | "unitPrice" | "serialNumbers" | "warranty" | "product", string>>;
 export type InvoiceErrors = {
   count: number;
-  fields: Partial<Record<"validUntil" | "billToCompany" | "saleType" | "upfrontAmount" | "creditDays" | "issueDate" | "dueDate" | "billToName" | "billToEmail" | "billToAddress" | "billToCity" | "billToPostalCode" | "billToPhone" | "reference" | "paymentTerms" | "notes" | "discount" | "tax" | "internalNote" | "lines", string>>;
+  fields: Partial<Record<"validUntil" | "billToCompany" | "saleType" | "upfrontAmount" | "creditDays" | "issueDate" | "dueDate" | "billToName" | "billToEmail" | "billToAddress" | "billToCity" | "billToPostalCode" | "billToPhone" | "reference" | "paymentTerms" | "notes" | "discount" | "tax" | "internalNote" | "lines" | "dealerName" | "dealerCommission", string>>;
   lines: Record<string, LineErrors>;
 };
 
@@ -850,6 +902,13 @@ export function validateInvoiceForm(form: InvoiceForm, options: { forIssue?: boo
   if (discountError) fields.discount = discountError;
   const taxError = adjust(form.taxType, form.taxValue, "VAT / tax");
   if (taxError) fields.tax = taxError;
+  // 57: the dealer's commission (mirrors invoices_dealer_valid)
+  if (form.docType === "invoice" && form.dealerSupported) {
+    if (tooLong(form.dealerName, INVOICE_LIMITS.dealerName)) fields.dealerName = `At most ${INVOICE_LIMITS.dealerName} characters.`;
+    const commissionError = adjust(form.dealerCommissionType, form.dealerCommissionValue, "commission");
+    if (commissionError) fields.dealerCommission = commissionError;
+    else if ((form.dealerCommissionValue ?? 0) > 0 && form.dealerName.trim() === "") fields.dealerName = "Name the dealer the commission is for.";
+  }
   if (form.lines.length > INVOICE_LIMITS.lines) fields.lines = `An invoice can have at most ${INVOICE_LIMITS.lines} lines.`;
   else if (options.forIssue && form.lines.length === 0) fields.lines = "Add at least one line before issuing.";
   const seenSerials = new Map<string, string>(); // UPPER → the line key that has it
@@ -960,6 +1019,8 @@ export type InvoiceListRow = {
   amountPaid: number;
   balanceDue: number;
   itemCount: number;
+  /** 57: the dealer who referred the customer (invoices). */
+  dealerName: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -986,6 +1047,7 @@ export function normalizeInvoiceListRow(row: Row): InvoiceListRow {
     amountPaid: num(row.amount_paid),
     balanceDue: num(row.balance_due),
     itemCount: num(row.item_count),
+    dealerName: strOrNull(row.dealer_name),
     createdAt: strOrNull(row.created_at),
     updatedAt: strOrNull(row.updated_at),
   };
@@ -1006,10 +1068,11 @@ export async function fetchInvoicePage(
     signal: AbortSignal;
   },
 ): Promise<AdminPage<InvoiceListRow>> {
-  const run = (withDocType: boolean) => {
+  const run = (withDocType: boolean, withDealer: boolean) => {
     let query = supabase.from("invoices").select("*", { count: "exact" });
     if (withDocType) query = query.eq("doc_type", docType);
-    const or = orIlike(["number", "bill_to_name", "bill_to_phone", "bill_to_email", "reference", "order_id", "serial_search"], search);
+    const columns = ["number", "bill_to_name", "bill_to_phone", "bill_to_email", "reference", "order_id", "serial_search", ...(withDealer ? ["dealer_name"] : [])];
+    const or = orIlike(columns, search);
     if (or) query = query.or(or);
     if (filter === "draft") query = query.eq("status", "draft");
     else if (filter === "void") query = query.eq("status", "void");
@@ -1024,9 +1087,11 @@ export async function fetchInvoicePage(
     if (key !== "created_at") query = query.order("created_at", { ascending: false });
     return query.range(from, to).abortSignal(signal);
   };
-  let response = await run(true);
+  let response = await run(true, true);
+  // Before 57 there is no dealer_name column to search.
+  if (response.error?.code === "42703") response = await run(true, false);
   // Before 40 there is no doc_type column: every row is an invoice.
-  if (response.error?.code === "42703" && docType === "invoice") response = await run(false);
+  if (response.error?.code === "42703" && docType === "invoice") response = await run(false, false);
   const page = unwrapPage<Row>(response, docType === "quotation" ? DOCS_MIGRATION : INVOICES_MIGRATION);
   return { ...page, rows: page.rows.map(normalizeInvoiceListRow) };
 }

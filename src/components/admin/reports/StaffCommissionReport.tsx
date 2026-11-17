@@ -14,17 +14,45 @@ import { lkr2, money2, periodLabel, printStockReport } from "./stock";
 import { StockExportButtons, type StockExportKind } from "./StockReportFilters";
 
 /**
- * Reports → Staff commission (53_invoice_extras · admin_staff_commission_report), owner only.
- * Per person: the issued invoices dated in the period that count for them (the sales staff the
- * owner named on the invoice, else whoever made it), their sales before VAT / tax and after
+ * Reports → Commission (53_invoice_extras · admin_staff_commission_report), owner only.
+ * Staff, per person: the issued invoices dated in the period that count for them (the sales staff
+ * the owner named on the invoice, else whoever made it), their sales before VAT / tax and after
  * discounts, the commission at their Staff → Commission %, and the bonuses set on those invoices.
+ * Dealers (57_dealer_commission_delivery_notes), per dealer: the issued invoices dated in the
+ * period that name them (website orders too) and the commission set on each — in rupees, or a %
+ * of the sales before VAT / tax and after discounts.
  */
 
 const MIGRATION = "53_invoice_extras.sql";
+const DEALER_MIGRATION = "57_dealer_commission_delivery_notes.sql";
 
 type Person = { userId: string; name: string; role: string; percent: number | null; invoices: number; sales: number; paid: number; commission: number; bonus: number; total: number };
 type Line = { id: number; number: string; issueDate: string; client: string; userId: string; sales: number; paid: number; paymentStatus: string; bonus: number; commission: number };
-type Report = { rows: Person[]; invoices: Line[]; totals: { invoices: number; sales: number; paid: number; commission: number; bonus: number; total: number }; generatedAt: string };
+type Dealer = { name: string; invoices: number; sales: number; paid: number; commission: number };
+type DealerLine = {
+  id: number;
+  number: string;
+  issueDate: string;
+  client: string;
+  dealer: string;
+  sales: number;
+  paid: number;
+  paymentStatus: string;
+  commissionType: "amount" | "percent";
+  commissionValue: number;
+  commission: number;
+};
+type Report = {
+  rows: Person[];
+  invoices: Line[];
+  totals: { invoices: number; sales: number; paid: number; commission: number; bonus: number; total: number };
+  /** 57 applied: the dealers are in the report. */
+  dealerSupported: boolean;
+  dealers: Dealer[];
+  dealerInvoices: DealerLine[];
+  dealerTotals: { invoices: number; sales: number; paid: number; commission: number };
+  generatedAt: string;
+};
 
 type Row = Record<string, unknown>;
 const n = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" && v !== "" ? Number(v) : 0);
@@ -36,8 +64,25 @@ async function fetchReport(supabase: import("@supabase/supabase-js").SupabaseCli
   if (error) throw new AdminDataError(error, MIGRATION);
   const o = (data ?? {}) as Row;
   const totals = (o.totals ?? {}) as Row;
+  const dealerTotals = (o.dealer_totals ?? {}) as Row;
   return {
     generatedAt: new Date().toISOString(),
+    dealerSupported: "dealers" in o,
+    dealers: rows(o.dealers).map((d) => ({ name: t(d.name) || "Unknown", invoices: n(d.invoices), sales: n(d.sales), paid: n(d.paid), commission: n(d.commission) })),
+    dealerInvoices: rows(o.dealer_invoices).map((i) => ({
+      id: n(i.id),
+      number: t(i.number),
+      issueDate: t(i.issue_date),
+      client: t(i.client),
+      dealer: t(i.dealer),
+      sales: n(i.sales),
+      paid: n(i.paid),
+      paymentStatus: t(i.payment_status),
+      commissionType: i.commission_type === "percent" ? "percent" : "amount",
+      commissionValue: n(i.commission_value),
+      commission: n(i.commission),
+    })),
+    dealerTotals: { invoices: n(dealerTotals.invoices), sales: n(dealerTotals.sales), paid: n(dealerTotals.paid), commission: n(dealerTotals.commission) },
     rows: rows(o.rows).map((r) => ({
       userId: t(r.user_id),
       name: t(r.name) || "Unknown",
@@ -72,6 +117,50 @@ const paidLabel = (s: string) => (s === "paid" ? "Paid" : s === "partial" ? "Par
 
 function nameOf(r: Report, userId: string): string {
   return r.rows.find((p) => p.userId === userId)?.name ?? "Unknown";
+}
+
+/** "2.5% of the sales" / "Rs." — how the commission was set on the invoice. */
+const dealerRateLabel = (i: DealerLine) => (i.commissionType === "percent" ? `${i.commissionValue}%` : "Rs.");
+
+function dealerXlsx(r: Report, period: string): XlsxSheet {
+  return {
+    name: "Dealer commission",
+    columns: [{ width: 30 }, { width: 14 }, { width: 28 }, { width: 28 }, { width: 12 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 18 }],
+    rows: [
+      [{ value: `${site.name} — Dealer commission`, style: "title" }],
+      [{ value: `Period: ${period} (Sri Lanka time) · LKR · sales are before VAT / tax, after discounts`, style: "muted" }],
+      [{ value: `Generated ${formatDateTime(r.generatedAt)} (Sri Lanka time)`, style: "muted" }],
+      [],
+      ["Dealer", "Invoices", "Sales (LKR)", "Paid (LKR)", "Commission (LKR)"].map((c): XlsxCell => ({ value: c, style: "header" })),
+      ...r.dealers.map((d): XlsxCell[] => [
+        d.name,
+        { value: d.invoices, style: "int" },
+        { value: d.sales, style: "money" },
+        { value: d.paid, style: "money" },
+        { value: d.commission, style: "moneyBold" },
+      ]),
+      [
+        { value: "Total", style: "bold" },
+        { value: r.dealerTotals.invoices, style: "int" },
+        { value: r.dealerTotals.sales, style: "moneyBold" },
+        { value: r.dealerTotals.paid, style: "moneyBold" },
+        { value: r.dealerTotals.commission, style: "moneyBold" },
+      ],
+      [],
+      ["Invoice", "Date", "Client", "Dealer", "Payment", "Sales (LKR)", "Paid (LKR)", "Rate", "Commission (LKR)"].map((c): XlsxCell => ({ value: c, style: "header" })),
+      ...r.dealerInvoices.map((i): XlsxCell[] => [
+        i.number,
+        formatInvoiceDate(i.issueDate),
+        i.client,
+        i.dealer,
+        paidLabel(i.paymentStatus),
+        { value: i.sales, style: "money" },
+        { value: i.paid, style: "money" },
+        dealerRateLabel(i),
+        { value: i.commission, style: "money" },
+      ]),
+    ],
+  };
 }
 
 function commissionXlsx(r: Report, period: string): XlsxSheet {
@@ -125,13 +214,14 @@ function commissionXlsx(r: Report, period: string): XlsxSheet {
 
 function commissionPrint(r: Report, period: string): PrintReportInput {
   return {
-    title: "Staff commission",
+    title: r.dealerSupported ? "Commission — staff and dealers" : "Staff commission",
     subtitle: `${period} (Sri Lanka time) · generated ${formatDateTime(r.generatedAt)}`,
     meta: [
       { label: "Sales (before VAT / tax)", value: lkr2(r.totals.sales) },
-      { label: "Commission", value: lkr2(r.totals.commission) },
+      { label: "Staff commission", value: lkr2(r.totals.commission) },
       { label: "Bonuses", value: lkr2(r.totals.bonus) },
-      { label: "Total due", value: lkr2(r.totals.total) },
+      { label: "Staff total due", value: lkr2(r.totals.total) },
+      ...(r.dealerSupported ? [{ label: "Dealer commission", value: lkr2(r.dealerTotals.commission) }] : []),
     ],
     sections: [
       {
@@ -164,6 +254,38 @@ function commissionPrint(r: Report, period: string): PrintReportInput {
         rows: r.invoices.map((i) => [i.number, formatInvoiceDate(i.issueDate), i.client, nameOf(r, i.userId), money2(i.sales), money2(i.commission), money2(i.bonus)]),
         empty: "No invoices in this period.",
       },
+      ...(r.dealerSupported
+        ? ([
+            {
+              kind: "table",
+              heading: "Per dealer",
+              columns: [
+                { label: "Dealer" },
+                { label: "Invoices", align: "right", width: "56px" },
+                { label: "Sales", align: "right" },
+                { label: "Commission", align: "right" },
+              ],
+              rows: r.dealers.map((d) => [d.name, d.invoices, money2(d.sales), money2(d.commission)]),
+              footer: ["Total", r.dealerTotals.invoices, money2(r.dealerTotals.sales), money2(r.dealerTotals.commission)],
+              empty: "No invoices with a dealer in this period.",
+            },
+            {
+              kind: "table",
+              heading: "Dealer invoices",
+              columns: [
+                { label: "Invoice", width: "86px" },
+                { label: "Date", width: "70px" },
+                { label: "Client" },
+                { label: "Dealer" },
+                { label: "Sales", align: "right", width: "84px" },
+                { label: "Rate", align: "right", width: "50px" },
+                { label: "Commission", align: "right", width: "84px" },
+              ],
+              rows: r.dealerInvoices.map((i) => [i.number, formatInvoiceDate(i.issueDate), i.client, i.dealer, money2(i.sales), dealerRateLabel(i), money2(i.commission)]),
+              empty: "No invoices with a dealer in this period.",
+            },
+          ] satisfies PrintReportInput["sections"])
+        : []),
     ],
   };
 }
@@ -179,7 +301,7 @@ export function StaffCommissionReport() {
     if (!r || busy) return;
     setBusy(kind);
     try {
-      if (kind === "xlsx") downloadXlsx(`staff-commission-${range.from}_${range.to}`, [commissionXlsx(r, period)]);
+      if (kind === "xlsx") downloadXlsx(`commission-${range.from}_${range.to}`, [commissionXlsx(r, period), ...(r.dealerSupported ? [dealerXlsx(r, period)] : [])]);
       else if (!(await printStockReport(commissionPrint(r, period), true))) adminToast.error("Couldn't open the print dialog");
     } finally {
       setBusy(null);
@@ -188,14 +310,15 @@ export function StaffCommissionReport() {
 
   return (
     <>
-      {report.error && <QueryError error={report.error} onRetry={report.refetch} feature="The staff commission report" className="mb-4" />}
+      {report.error && <QueryError error={report.error} onRetry={report.refetch} feature="The commission report" className="mb-4" />}
       <SectionCard padded={false} className="mb-5">
         <div className="p-4 pb-1">
           <Toolbar dateRange={{ value: range, onChange: setRange }} actions={<StockExportButtons busy={busy} disabled={!r || report.loading} onExport={(k) => void runExport(k)} />} />
           <p className="mb-3 text-xs leading-5 text-adm-mute">
             Issued invoices dated {period} (Sri Lanka days), each counted for the sales staff named on it — or whoever made it. Sales are before VAT / tax and after
             discounts; commission uses each person&apos;s Staff → Commission %, plus the bonuses set on the invoices. Website orders count only when you name a sales
-            staff on their invoice. Only you (the owner) can see this report.
+            staff on their invoice.{r?.dealerSupported ? " Dealers: every issued invoice that names the dealer who sent the customer (website orders too), with the commission set on it." : ""} Only you
+            (the owner) can see this report.
             {r && (
               <>
                 {" "}
@@ -208,9 +331,9 @@ export function StaffCommissionReport() {
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Sales counted" loading={report.loading && !r} value={r ? lkr2(r.totals.sales) : "—"} hint={r ? `${r.totals.invoices} invoices` : undefined} />
-        <KpiTile label="Commission" loading={report.loading && !r} value={r ? lkr2(r.totals.commission) : "—"} />
+        <KpiTile label="Staff commission" loading={report.loading && !r} value={r ? lkr2(r.totals.commission) : "—"} />
         <KpiTile label="Bonuses" loading={report.loading && !r} value={r ? lkr2(r.totals.bonus) : "—"} />
-        <KpiTile label="Total due" loading={report.loading && !r} value={r ? lkr2(r.totals.total) : "—"} />
+        <KpiTile label="Staff total due" loading={report.loading && !r} value={r ? lkr2(r.totals.total) : "—"} />
       </div>
 
       {r && r.rows.some((p) => p.role === "staff" && p.percent == null) && (
@@ -276,6 +399,68 @@ export function StaffCommissionReport() {
           empty={{ title: "No invoices in this period", description: "Pick another period." }}
         />
       </SectionCard>
+
+      {r && !r.dealerSupported && (
+        <AdminNotice className="mt-5" title="Dealer commission isn't switched on yet">
+          Apply <span className="font-mono">{DEALER_MIGRATION}</span> in Supabase: invoices then take the dealer who sent the customer and their commission, and this
+          report adds it up per dealer.
+        </AdminNotice>
+      )}
+
+      {r?.dealerSupported && (
+        <>
+          <div className="mt-5 mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiTile label="Sales with a dealer" value={lkr2(r.dealerTotals.sales)} hint={`${r.dealerTotals.invoices} invoice${r.dealerTotals.invoices === 1 ? "" : "s"}`} />
+            <KpiTile label="Dealer commission" value={lkr2(r.dealerTotals.commission)} hint={`${r.dealers.length} dealer${r.dealers.length === 1 ? "" : "s"}`} />
+          </div>
+
+          <SectionCard padded={false} title="Per dealer" className="mb-5">
+            <DataTable<Dealer>
+              caption="Commission per dealer"
+              rows={r.dealers}
+              rowKey={(d) => d.name.toLowerCase()}
+              rowLabel={(d) => d.name}
+              loading={report.loading}
+              failed={Boolean(report.error)}
+              columns={[
+                { key: "name", header: "Dealer", cell: (d) => <span className="font-semibold">{d.name}</span> },
+                { key: "invoices", header: "Invoices", align: "right", cell: (d) => <span className="font-mono tabular-nums">{d.invoices}</span> },
+                { key: "sales", header: "Sales (LKR)", align: "right", hideBelow: "md", cell: (d) => <span className="font-mono tabular-nums">{money2(d.sales)}</span> },
+                { key: "commission", header: "Commission", align: "right", cell: (d) => <span className="font-mono font-semibold tabular-nums">{money2(d.commission)}</span> },
+              ]}
+              empty={{ title: "No invoices with a dealer in this period", description: "Name the dealer under Invoice details on an invoice." }}
+            />
+          </SectionCard>
+
+          <SectionCard padded={false} title="Dealer invoices">
+            <DataTable<DealerLine>
+              caption="Invoices with a dealer"
+              rows={r.dealerInvoices}
+              rowKey={(i) => i.id}
+              rowLabel={(i) => i.number}
+              loading={report.loading}
+              failed={Boolean(report.error)}
+              onRowClick={(i) => setAdminParams({ tab: "invoices", invoice: i.id }, { reset: true })}
+              columns={[
+                { key: "number", header: "Invoice", cell: (i) => <span className="font-mono font-semibold">{i.number}</span> },
+                { key: "date", header: "Date", hideBelow: "md", cell: (i) => formatInvoiceDate(i.issueDate) },
+                { key: "client", header: "Client", hideBelow: "lg", cell: (i) => i.client },
+                { key: "dealer", header: "Dealer", cell: (i) => i.dealer },
+                {
+                  key: "paid",
+                  header: "Payment",
+                  hideBelow: "md",
+                  cell: (i) => <StatusBadge tone={i.paymentStatus === "paid" ? "success" : "warning"}>{paidLabel(i.paymentStatus)}</StatusBadge>,
+                },
+                { key: "sales", header: "Sales (LKR)", align: "right", hideBelow: "lg", cell: (i) => <span className="font-mono tabular-nums">{money2(i.sales)}</span> },
+                { key: "rate", header: "Rate", align: "right", hideBelow: "md", cell: (i) => <span className="font-mono tabular-nums">{dealerRateLabel(i)}</span> },
+                { key: "commission", header: "Commission", align: "right", cell: (i) => <span className="font-mono tabular-nums">{money2(i.commission)}</span> },
+              ]}
+              empty={{ title: "No invoices with a dealer in this period", description: "Pick another period." }}
+            />
+          </SectionCard>
+        </>
+      )}
     </>
   );
 }

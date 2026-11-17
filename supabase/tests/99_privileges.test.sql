@@ -162,7 +162,10 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.admin_instagram_status()',                                  '55_instagram_feed'),
   ('public.admin_save_instagram(jsonb)',                               '55_instagram_feed'),
   ('public.admin_instagram_token()',                                   '55_instagram_feed'),
-  ('public.admin_instagram_store(jsonb)',                              '55_instagram_feed');
+  ('public.admin_instagram_store(jsonb)',                              '55_instagram_feed'),
+  ('public.admin_dealer_names()',                                      '57_dealer_commission_delivery_notes'),
+  ('public.admin_save_delivery_note(integer,jsonb)',                   '57_dealer_commission_delivery_notes'),
+  ('public.admin_delete_delivery_note(integer)',                       '57_dealer_commission_delivery_notes');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);
@@ -207,7 +210,8 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.whatsapp_settings',       ARRAY['anon', 'authenticated'], '54_whatsapp'),
   ('public.whatsapp_conversations',  ARRAY['anon'],                  '54_whatsapp'),
   ('public.whatsapp_messages',       ARRAY['anon'],                  '54_whatsapp'),
-  ('public.instagram_settings',      ARRAY['anon', 'authenticated'], '55_instagram_feed');
+  ('public.instagram_settings',      ARRAY['anon', 'authenticated'], '55_instagram_feed'),
+  ('public.delivery_notes',          ARRAY['anon'],                  '57_dealer_commission_delivery_notes');
 
 -- ── the lists themselves are valid ──────────────────────────────────────────
 SELECT pg_temp.eq((SELECT string_agg(fn || ' (' || migration || ')', ', ' ORDER BY fn)

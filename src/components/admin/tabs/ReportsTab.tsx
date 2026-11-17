@@ -83,7 +83,7 @@ export default function ReportsTab() {
   const tab = getAdminTab("reports");
   const param = useAdminParam("report");
   const access = useAdminAccess();
-  // Staff commission is the owner's only (53_invoice_extras).
+  // Commission (staff, and dealers from 57) is the owner's only (53_invoice_extras).
   const asked: ReportKind = REPORT_KINDS.includes(param as ReportKind) ? (param as ReportKind) : "sales";
   const kind: ReportKind = asked === "staff-commission" && !access.isAdmin ? "sales" : asked;
   return (
@@ -98,7 +98,7 @@ export default function ReportsTab() {
           { key: "invoiced-sales", label: "Invoiced sales" },
           { key: "inventory-value", label: "Inventory value" },
           { key: "stock-movement", label: "Stock movement" },
-          ...(access.isAdmin ? [{ key: "staff-commission" as const, label: "Staff commission" }] : []),
+          ...(access.isAdmin ? [{ key: "staff-commission" as const, label: "Commission" }] : []),
         ]}
       >
         {kind === "staff-commission" ? (
