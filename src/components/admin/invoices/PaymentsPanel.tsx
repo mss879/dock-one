@@ -21,6 +21,7 @@ import { useAdminQuery } from "@/lib/admin/query";
 const LINK_MIGRATION = "44_connected_records.sql";
 import { adminToast } from "@/lib/admin/toast";
 import { adminRpc } from "@/lib/admin/write";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 /**
  * Money received against an issued invoice, as numbered RECEIPTS (40): the invoice total, what is
@@ -231,7 +232,7 @@ export function PaymentsPanel({
                   {payment.status === "void" && payment.voidReason && <span> · voided: {payment.voidReason}</span>}
                 </p>
               </div>
-              <IconButton size="sm" label={`Print receipt ${payment.receiptNumber ?? ""}`} icon={<Printer className="size-3.5" />} onClick={() => void printReceipt({ ...payment, invoiceNumber: number }, settings)} />
+              <IconButton size="sm" label={`Print receipt ${payment.receiptNumber ?? ""}`} icon={<Printer className="size-3.5" />} onClick={() => void printReceipt({ ...payment, invoiceNumber: number }, settings, getBrowserSupabase())} />
               {canUnlink(payment) && (
                 <IconButton size="sm" label={`Unlink receipt ${payment.receiptNumber ?? ""}`} icon={<Unlink className="size-3.5" />} onClick={() => void unlink(payment)} />
               )}

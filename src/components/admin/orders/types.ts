@@ -59,6 +59,8 @@ export type AdminOrderItem = {
   imageUrl: string | null;
   quantity: number;
   unitPrice: number;
+  /** Units still to come — ordered beyond the stock on hand (50; 0 before it). */
+  backorder: number;
 };
 
 export type AdminTimelineRow = { id: number; status: string; location: string | null; description: string | null; createdAt: string | null };
@@ -126,6 +128,7 @@ export function normalizeAdminItem(row: Row): AdminOrderItem {
     imageUrl: text(row.image_url),
     quantity: num(row.quantity),
     unitPrice: num(row.unit_price),
+    backorder: Math.max(0, num(row.backorder_qty)),
   };
 }
 

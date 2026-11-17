@@ -186,8 +186,8 @@ export function SpecsEditor({
       ) : (
         <AdminNotice tone="info" title={categoryId ? `No spec fields for ${categoryName ?? categoryId}` : "Choose a category first"}>
           {categoryId
-            ? "Typed spec fields exist for laptops, storage, keyboards and mice. Specs this product already has are kept exactly as they are."
-            : "The spec fields depend on the category (laptops, storage, keyboards, mice)."}
+            ? "Typed spec fields exist for laptops, storage, monitors, keyboards and mice. Specs this product already has are kept exactly as they are."
+            : "The spec fields depend on the category (laptops, storage, monitors, keyboards, mice)."}
         </AdminNotice>
       )}
 

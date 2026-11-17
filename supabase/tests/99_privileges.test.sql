@@ -63,7 +63,13 @@ INSERT INTO allow_anon (fn, migration) VALUES
   ('public.ping_product_view(integer,uuid)',             '42_storefront_extras (route)'),
   ('public.begin_card_payment(text,text,uuid)',          '49_card_payments (secret)'),
   ('public.mark_order_paid(text,text,jsonb)',            '49_card_payments (secret)'),
-  ('public.record_card_payment_failure(text,text,jsonb)', '49_card_payments (secret)');
+  ('public.record_card_payment_failure(text,text,jsonb)', '49_card_payments (secret)'),
+  ('public.request_stock_alert(integer,text)',           '50_product_availability (route)'),
+  ('public.leave_product_view(integer,uuid)',            '51_product_viewers (route)'),
+  ('public.whatsapp_verify_webhook(text)',               '54_whatsapp (route)'),
+  ('public.whatsapp_receive(text,text)',                 '54_whatsapp (route, Meta signature)'),
+  ('public.whatsapp_record_ai_reply(text,text,jsonb)',   '54_whatsapp (route, Meta signature)'),
+  ('public.get_instagram_feed()',                        '55_instagram_feed');
 
 CREATE TEMP TABLE allow_authenticated (fn text PRIMARY KEY, migration text NOT NULL); -- grant U (NOT anon)
 INSERT INTO allow_authenticated (fn, migration) VALUES
@@ -140,7 +146,23 @@ INSERT INTO allow_authenticated (fn, migration) VALUES
   ('public.admin_replace_image_url(text,text)',                        '43_image_housekeeping'),
   ('public.admin_unlink_receipt(integer)',                             '44_connected_records'),
   ('public.admin_set_collection_members(text,integer[],jsonb)',        '46_collection_variants'),
-  ('public.admin_save_nav_menu(jsonb)',                                '48_navbar_menu');
+  ('public.admin_save_nav_menu(jsonb)',                                '48_navbar_menu'),
+  ('public.admin_take_stock_alerts(integer)',                          '50_product_availability'),
+  ('public.admin_return_stock_alerts(bigint[])',                       '50_product_availability'),
+  ('public.admin_set_staff_commission(uuid,numeric)',                  '53_invoice_extras'),
+  ('public.admin_staff_names()',                                       '53_invoice_extras'),
+  ('public.admin_staff_commission_report(date,date)',                  '53_invoice_extras'),
+  ('public.admin_whatsapp_status()',                                   '54_whatsapp'),
+  ('public.admin_save_whatsapp_settings(jsonb)',                       '54_whatsapp'),
+  ('public.admin_whatsapp_connection_result(jsonb)',                   '54_whatsapp'),
+  ('public.whatsapp_send_credentials()',                               '54_whatsapp'),
+  ('public.admin_whatsapp_record_outbound(jsonb)',                     '54_whatsapp'),
+  ('public.admin_whatsapp_update_conversation(integer,jsonb)',         '54_whatsapp'),
+  ('public.admin_whatsapp_window(text)',                               '54_whatsapp'),
+  ('public.admin_instagram_status()',                                  '55_instagram_feed'),
+  ('public.admin_save_instagram(jsonb)',                               '55_instagram_feed'),
+  ('public.admin_instagram_token()',                                   '55_instagram_feed'),
+  ('public.admin_instagram_store(jsonb)',                              '55_instagram_feed');
 
 -- tables no API role may touch at all (nobody), or only admins through RLS (anon never)
 CREATE TEMP TABLE sealed_tables (tbl text PRIMARY KEY, sealed_from text[] NOT NULL, migration text NOT NULL);
@@ -180,7 +202,12 @@ INSERT INTO sealed_tables (tbl, sealed_from, migration) VALUES
   ('public.suppliers',               ARRAY['anon'],                  '41_suppliers_warranty'),
   ('public.unit_warranties',         ARRAY['anon', 'authenticated'], '41_suppliers_warranty'),
   ('public.product_presence',        ARRAY['anon', 'authenticated'], '42_storefront_extras'),
-  ('public.payment_attempts',        ARRAY['anon'],                  '49_card_payments');
+  ('public.payment_attempts',        ARRAY['anon'],                  '49_card_payments'),
+  ('public.stock_alerts',            ARRAY['anon'],                  '50_product_availability'),
+  ('public.whatsapp_settings',       ARRAY['anon', 'authenticated'], '54_whatsapp'),
+  ('public.whatsapp_conversations',  ARRAY['anon'],                  '54_whatsapp'),
+  ('public.whatsapp_messages',       ARRAY['anon'],                  '54_whatsapp'),
+  ('public.instagram_settings',      ARRAY['anon', 'authenticated'], '55_instagram_feed');
 
 -- ── the lists themselves are valid ──────────────────────────────────────────
 SELECT pg_temp.eq((SELECT string_agg(fn || ' (' || migration || ')', ', ' ORDER BY fn)

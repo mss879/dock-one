@@ -3,6 +3,7 @@ import { ConsentBanner } from "@/components/analytics/ConsentBanner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 import { CartDrawer } from "@/components/cart/CartDrawer";
+import { CompareBar } from "@/components/compare/CompareBar";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { TopBar } from "@/components/layout/TopBar";
@@ -38,6 +39,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
       </div>
       <Footer />
       <CartDrawer />
+      <CompareBar />
       <Toaster />
       <AssistantWidget />
       <ConsentBanner />

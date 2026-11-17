@@ -3,12 +3,15 @@
 import { Minus, Plus, Zap } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { CompareButton } from "@/components/compare/CompareButton";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { Button } from "@/components/ui/Button";
 import { Price } from "@/components/ui/Price";
+import { variantAvailability, type AvailabilityStatus, type StockReading } from "@/lib/availability";
 import { cart, cartSnapshotFromVariant, MAX_QTY } from "@/lib/cart";
 import { discountPercent, type ProductDetail, type ProductVariant } from "@/lib/catalogue-shared";
 import { toast } from "@/lib/toast";
+import { NotifyMe } from "./NotifyMe";
 import { effectiveVariant, optionAxes, resolveOption } from "./variant-options";
 
 /*
@@ -51,13 +54,26 @@ function useAvailability(productId: number): Availability {
   return availability;
 }
 
-/** A tracked variant absent from the answer is untracked = always sells ("in stock"). null = not known (yet). */
-function stockOf(availability: Availability, variantId: number): VariantStock | null {
-  if (availability.status !== "ready") return null;
-  return availability.stock[variantId] ?? { state: "in" };
+/**
+ * The variant's stock as lib/availability reads it: undefined = not known (yet), null = not
+ * tracked (always sells), otherwise the level ("in" carries no exact number — 1000 stands for "plenty").
+ */
+function readingOf(availability: Availability, variantId: number): StockReading {
+  if (availability.status !== "ready") return undefined;
+  const stock: VariantStock | undefined = availability.stock[variantId];
+  if (!stock) return null;
+  if (stock.state === "out") return { level: 0, low: false };
+  if (stock.state === "low") return { level: stock.left ?? 1, low: true };
+  return { level: 1000, low: false };
 }
 
-const DOT: Record<StockState, string> = { in: "bg-lime ring-1 ring-ink/30", low: "bg-lime ring-2 ring-ink", out: "bg-surface ring-1 ring-ink" };
+const DOT: Record<AvailabilityStatus, string> = {
+  in_stock: "bg-lime ring-1 ring-ink/30",
+  low_stock: "bg-lime ring-2 ring-ink",
+  to_order: "bg-violet ring-1 ring-violet-ink",
+  preorder: "bg-violet ring-1 ring-violet-ink",
+  out_of_stock: "bg-surface ring-1 ring-ink",
+};
 
 const subscribeToHistory = (onChange: () => void) => {
   window.addEventListener("popstate", onChange);
@@ -100,14 +116,18 @@ export function ProductPurchase({
   const linkedId = useLinkedVariantId();
   const linked = linkedId !== null && variants.some((variant) => variant.id === linkedId) ? linkedId : null;
 
-  const isOut = (variant: ProductVariant) => stockOf(availability, variant.id)?.state === "out";
+  // How each option is sold (50) with its live stock: in stock, to order, pre-order or out of stock.
+  const viewOf = (variant: ProductVariant) => variantAvailability(variant.availability, readingOf(availability, variant.id));
+  const isOut = (variant: ProductVariant) => !viewOf(variant).orderable;
   // Until the shopper picks something, never leave a sold-out default selected when another option can be bought
   // (an option they followed a link to stays, sold out or not: it's the one they came for).
   const variant = effectiveVariant(variants, touched ? chosenId : (linked ?? chosenId), touched || linked !== null, isOut);
 
-  const stock = variant ? stockOf(availability, variant.id) : null;
-  const soldOut = stock?.state === "out";
-  const maxQty = stock?.state === "low" && stock.left ? Math.min(MAX_QTY, stock.left) : MAX_QTY;
+  const view = variant ? viewOf(variant) : null;
+  const soldOut = view ? !view.orderable : false;
+  const maxQty = view?.maxQty ? Math.min(MAX_QTY, view.maxQty) : MAX_QTY;
+  // A "stock" option's band waits for the live count; the other modes say what they are at once.
+  const waitingForStock = variant?.availability.mode === "stock" && availability.status !== "ready";
   const quantity = Math.min(Math.max(qty, 1), maxQty);
   const off = variant ? discountPercent(variant) : 0;
 
@@ -142,22 +162,30 @@ export function ProductPurchase({
 
       {sale && variant && <SaleNote sale={sale} variant={variant} variants={variants} onPick={choose} />}
 
-      {/* availability (live) */}
+      {/* availability (live): in stock / available to order / pre-order / out of stock, and the wait */}
       {variant && (
-        <p aria-live="polite" className="mt-3 flex min-h-6 items-center gap-2 text-sm">
-          {stock ? (
+        <div aria-live="polite" className="mt-3 min-h-6 text-sm">
+          {waitingForStock ? (
+            availability.status === "unknown" ? (
+              <span className="text-ink-2">Availability is confirmed at checkout.</span>
+            ) : (
+              <span className="label text-mute">Checking availability…</span>
+            )
+          ) : view ? (
             <>
-              <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${DOT[stock.state]}`} />
-              <span className={stock.state === "out" ? "text-ink-2" : "font-medium"}>
-                {stock.state === "out" ? "Out of stock" : stock.state === "low" ? `Only ${stock.left} left` : "In stock"}
-              </span>
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${DOT[view.status]}`} />
+                <span className={view.status === "out_of_stock" ? "text-ink-2" : "font-medium"}>{view.label}</span>
+                {view.wait && view.onShelf === null && <span className="text-ink-2">· {view.wait}</span>}
+              </p>
+              {view.onShelf !== null && quantity > view.onShelf && (
+                <p className="mt-1 text-[13px] text-ink-2">
+                  {view.onShelf} ready now; the rest {quantity - view.onShelf === 1 ? "is" : "are"} ordered in for you{view.wait ? ` (${view.wait.charAt(0).toLowerCase()}${view.wait.slice(1)})` : ""}.
+                </p>
+              )}
             </>
-          ) : availability.status === "unknown" ? (
-            <span className="text-ink-2">Availability is confirmed at checkout.</span>
-          ) : (
-            <span className="label text-mute">Checking availability…</span>
-          )}
-        </p>
+          ) : null}
+        </div>
       )}
 
       {/* variant selector — hidden for single-variant products */}
@@ -237,20 +265,24 @@ export function ProductPurchase({
           </div>
         </div>
         <Button size="lg" onClick={add} disabled={!variant || soldOut} className="min-w-0 flex-1">
-          {!variant ? "Unavailable" : soldOut ? "Out of stock" : "Add to basket"}
+          {!variant ? "Unavailable" : soldOut ? "Out of stock" : view?.status === "preorder" ? "Pre-order" : "Add to basket"}
         </Button>
         <div className="grid size-13 shrink-0 place-items-center border border-line bg-surface">
           <WishlistButton productId={product.id} productName={product.name} />
         </div>
       </div>
-      {variant && (
-        <a
-          href={`/quote?variant=${variant.id}&qty=${quantity}`}
-          className="label mt-3 inline-flex min-h-10 items-center gap-2 font-semibold text-ink-2 underline decoration-line underline-offset-4 hover:text-violet-ink hover:decoration-violet"
-        >
-          Buying for a business? Request a quotation
-        </a>
-      )}
+      {variant && view?.notify && <NotifyMe key={variant.id} variantId={variant.id} productName={product.name} optionName={variants.length > 1 ? variant.name : null} />}
+      <div className="mt-3 flex flex-wrap items-center gap-x-6">
+        {variant && (
+          <a
+            href={`/quote?variant=${variant.id}&qty=${quantity}`}
+            className="label inline-flex min-h-10 items-center gap-2 font-semibold text-ink-2 underline decoration-line underline-offset-4 hover:text-violet-ink hover:decoration-violet"
+          >
+            Buying for a business? Request a quotation
+          </a>
+        )}
+        <CompareButton look="text" product={{ id: product.id, slug: product.slug, name: product.name, imageUrl: product.imageUrl, categoryId: product.categoryId }} />
+      </div>
     </div>
   );
 }

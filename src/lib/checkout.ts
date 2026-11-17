@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { availabilityWait, backorderNote, variantAvailabilityFromRow, type AvailabilityMode } from "@/lib/availability";
 import { CURRENCY_CODES, type CurrencyCode } from "@/lib/currency-shared";
 import { discountMessage, type DiscountVerdict, refusedVerdict, unavailableVerdict, verdictFromSql } from "@/lib/discount-copy";
 import { DISTRICTS, normalizeLkPhone } from "@/lib/sri-lanka";
@@ -311,6 +312,12 @@ export type QuoteLine = {
   stock: QuoteStock | null;
   /** Exact level only when low or insufficient. */
   stockLevel: number | null;
+  /** How the option is sold (50): an "order" / "preorder" line may wait for stock. null before 50. */
+  availability: AvailabilityMode | null;
+  /** Units of this line that are not on the shelf — they are ordered in / awaited (50). */
+  backorder: number;
+  /** "Ships in 7–10 days" / "Expected 20 Dec 2026" for a line that waits. */
+  wait: string | null;
 };
 
 export type Quote = {
@@ -350,6 +357,8 @@ const STOCKS: readonly QuoteStock[] = ["ok", "low", "out"];
 
 function quoteLineFromSql(row: Row): QuoteLine {
   const reason = REASONS.includes(row.reason as QuoteLineReason) ? (row.reason as QuoteLineReason) : null;
+  const variantMode = variantAvailabilityFromRow(row);
+  const mode = typeof row.availability === "string" ? variantMode.mode : null;
   const unitPrice = num(row.unit_price);
   const compareAt = num(row.compare_at_price);
   return {
@@ -371,6 +380,9 @@ function quoteLineFromSql(row: Row): QuoteLine {
     lineTotal: num(row.line_total),
     stock: STOCKS.includes(row.stock as QuoteStock) ? (row.stock as QuoteStock) : null,
     stockLevel: num(row.stock_level),
+    availability: mode,
+    backorder: Math.max(0, Math.trunc(num(row.backorder) ?? 0)),
+    wait: mode ? availabilityWait(variantMode) : null,
   };
 }
 
@@ -403,7 +415,10 @@ export function parseQuote(raw: unknown): Quote | null {
 }
 
 /** Shopper copy for a quote line that needs attention (null = nothing to say). SQL_NOTES wording. */
-export function quoteLineNotice(line: Pick<QuoteLine, "reason" | "stock" | "stockLevel">): string | null {
+export function quoteLineNotice(line: Pick<QuoteLine, "reason" | "stock" | "stockLevel"> & Partial<Pick<QuoteLine, "availability" | "backorder" | "wait" | "quantity">>): string | null {
+  // 50: a line that waits for stock says so ("Available to order · Ships in 7–10 days").
+  const waiting = line.reason === null ? backorderNote(line.availability ?? null, line.backorder ?? 0, line.wait ?? null, line.quantity ?? 1) : null;
+  if (waiting) return waiting;
   switch (line.reason) {
     case "unknown_product":
     case "inactive":

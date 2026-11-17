@@ -37,7 +37,10 @@ const FORMATS: Record<string, SpecFormat> = {
   storage_gb: { label: "Storage", number: capacity },
   storage_type: { label: "Storage type" },
   display: { label: "Display" },
+  screen_in: { label: "Screen size", number: (n) => `${decimal(n)}"` },
+  touch: { label: "Touchscreen" },
   refresh_hz: { label: "Refresh rate", number: withUnit("Hz", integer) },
+  panel: { label: "Panel" },
   weight_kg: { label: "Weight", number: withUnit("kg") },
   battery_wh: { label: "Battery", number: withUnit("Wh") },
   battery_h: { label: "Battery life", number: withUnit("hours") },
@@ -67,6 +70,7 @@ const FORMATS: Record<string, SpecFormat> = {
   silent: { label: "Silent clicks" },
   // shared
   weight_g: { label: "Weight", number: withUnit("g", integer) },
+  condition: { label: "Condition" },
 };
 
 const ORDER = Object.keys(FORMATS);
@@ -113,4 +117,26 @@ export function formatSpecs(specs: Record<string, SpecValue> | null | undefined)
     rows.push({ key, label: FORMATS[key]?.label ?? humanise(key), value });
   }
   return rows;
+}
+
+/**
+ * Side-by-side spec rows for the compare page (Website changes, November 2026): every spec key
+ * any of the products has, in spec-sheet order (documented keys first, then the rest in the order
+ * they first appear), with each product's formatted value — "" where a product doesn't state it
+ * (never guessed).
+ */
+export function compareSpecRows(specsList: readonly (Record<string, SpecValue> | null | undefined)[]): { key: string; label: string; values: string[] }[] {
+  const perProduct = specsList.map((specs) => new Map(formatSpecs(specs).map((row) => [row.key, row])));
+  const keys: string[] = [];
+  for (const map of perProduct) for (const key of map.keys()) if (!keys.includes(key)) keys.push(key);
+  const rank = (key: string) => {
+    const i = ORDER.indexOf(key);
+    return i === -1 ? ORDER.length + keys.indexOf(key) : i;
+  };
+  return keys
+    .sort((a, b) => rank(a) - rank(b))
+    .map((key) => {
+      const label = perProduct.find((map) => map.has(key))?.get(key)?.label ?? key;
+      return { key, label, values: perProduct.map((map) => map.get(key)?.value ?? "") };
+    });
 }

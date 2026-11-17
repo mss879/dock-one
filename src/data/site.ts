@@ -10,5 +10,5 @@ export const site = {
   /** wordmark: big line + small line */
   wordmark: ["Dock One", "Solutions"] as const,
   description:
-    "Sri Lanka's tech store for laptops, storage devices, keyboards and mice. Official warranty, cash on delivery and island-wide delivery.",
+    "Sri Lanka's tech store for laptops, monitors, storage, networking and accessories, plus IT solutions for businesses. Official warranty and island-wide delivery.",
 };

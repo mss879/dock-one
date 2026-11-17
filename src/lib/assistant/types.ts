@@ -96,7 +96,7 @@ export type StageQuestionOption = { value: string; label: string; hint?: string 
 export type StageQuestion = { id: string; prompt: string; options: StageQuestionOption[] };
 
 /** Live stock band of one variant (checked this turn). `left` only for "low". */
-export type AssistantStockBand = { variant: string; state: "in" | "low" | "out"; left?: number };
+export type AssistantStockBand = { variant: string; state: "in" | "low" | "out" | "order" | "preorder"; left?: number; wait?: string };
 
 /** Every field built by the SERVER from the catalogue snapshot (P4). Prices are LKR; the widget converts for display. */
 export type AssistantCard = {

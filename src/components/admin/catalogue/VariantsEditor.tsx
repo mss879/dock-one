@@ -2,7 +2,8 @@
 
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import { SerialInputs } from "@/components/admin/serials/SerialInputs";
-import { AdminButton, Field, FieldError, IconButton, Input, MoneyInput, NumberInput, StatusBadge, Toggle } from "@/components/admin/ui";
+import { AdminButton, Field, FieldError, IconButton, Input, MoneyInput, NumberInput, Select, StatusBadge, Toggle } from "@/components/admin/ui";
+import { AVAILABILITY_MODE_LABELS, AVAILABILITY_MODES, availabilityWait, type AvailabilityMode } from "@/lib/availability";
 import {
   cleanSerialList,
   DEFAULT_THRESHOLD,
@@ -31,6 +32,7 @@ export function VariantsEditor({
   newKey,
   disabled = false,
   serialsSupported = false,
+  availabilitySupported = false,
 }: {
   variants: VariantForm[];
   onChange: (next: VariantForm[]) => void;
@@ -41,6 +43,8 @@ export function VariantsEditor({
   disabled?: boolean;
   /** 25's unit register exists: show the serial-number boxes. */
   serialsSupported?: boolean;
+  /** 50's columns exist: show "How it's sold". */
+  availabilitySupported?: boolean;
 }) {
   const update = (key: string, patch: Partial<VariantForm>) => onChange(variants.map((v) => (v.key === key ? { ...v, ...patch } : v)));
   const move = (index: number, to: number) => {
@@ -159,6 +163,10 @@ export function VariantsEditor({
                     </p>
                   )}
                 </div>
+
+                {availabilitySupported && (
+                  <AvailabilitySection variant={variant} title={title} error={e.availability} disabled={disabled} onChange={(patch) => update(variant.key, patch)} />
+                )}
 
                 {serialsSupported && variant.track && (
                   <SerialSection variant={variant} title={title} error={e.serials} disabled={disabled} onChange={(serials) => update(variant.key, { serials })} />
@@ -292,6 +300,80 @@ function SerialSection({
           </summary>
           <p className="mt-1 font-mono text-[11px] leading-5 break-words text-adm-ink-2">{variant.soldSerials.join(", ")}</p>
         </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * How the variant is sold (50) — what shoppers see on cards and the product page:
+ * "In stock / Out of stock" (from the stock), "Available to order" with the wait once it runs out
+ * (or always, when stock isn't tracked), "Pre-order" with the expected date, or "Out of stock".
+ */
+function AvailabilitySection({
+  variant,
+  title,
+  error,
+  disabled,
+  onChange,
+}: {
+  variant: VariantForm;
+  title: string;
+  error?: string;
+  disabled: boolean;
+  onChange: (patch: Partial<VariantForm>) => void;
+}) {
+  const waits = variant.availability === "order" || variant.availability === "preorder";
+  const preview = availabilityWait({
+    mode: variant.availability,
+    waitMinDays: variant.waitMin,
+    waitMaxDays: variant.waitMax,
+    availableOn: variant.availableOn || null,
+  });
+  const shopper: Record<AvailabilityMode, string> = {
+    stock: variant.track ? "In stock while there is stock, then Out of stock (with “Notify me”)." : "Always In stock (stock isn't tracked).",
+    order: variant.track
+      ? "In stock while there is stock; at 0 it can still be ordered — Available to order."
+      : "Available to order (stock isn't tracked, so every order is sourced).",
+    preorder: "Pre-order — it can be ordered now; it ships when it arrives.",
+    unavailable: "Out of stock (with “Notify me”) — it can't be ordered, whatever the stock says.",
+  };
+  return (
+    <div className="grid gap-3 border-t border-adm-line px-3 py-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      <Field label="How it's sold" className="sm:col-span-2" hint={shopper[variant.availability]}>
+        <Select
+          aria-label={`How ${title} is sold`}
+          value={variant.availability}
+          disabled={disabled}
+          options={AVAILABILITY_MODES.map((mode) => ({ value: mode, label: AVAILABILITY_MODE_LABELS[mode] }))}
+          onChange={(event) => onChange({ availability: event.target.value as AvailabilityMode })}
+        />
+      </Field>
+      {waits && (
+        <>
+          <Field label="Wait from (days)" optional>
+            <NumberInput value={variant.waitMin} min={0} max={365} disabled={disabled} onChange={(waitMin) => onChange({ waitMin })} />
+          </Field>
+          <Field label="Wait up to (days)" optional>
+            <NumberInput value={variant.waitMax} min={1} max={365} disabled={disabled} onChange={(waitMax) => onChange({ waitMax })} />
+          </Field>
+        </>
+      )}
+      {variant.availability === "preorder" && (
+        <Field label="Expected on" optional hint="Shown instead of the days until it passes.">
+          <Input type="date" value={variant.availableOn} disabled={disabled} onChange={(event) => onChange({ availableOn: event.target.value })} />
+        </Field>
+      )}
+      {waits && (
+        <p className="self-end pb-2 text-xs leading-5 text-adm-mute sm:col-span-2 lg:col-span-3">
+          Shoppers see: <span className="font-semibold text-adm-ink">{variant.availability === "preorder" ? "Pre-order" : "Available to order"}</span>
+          {preview ? ` · ${preview}` : " (no wait shown — add the days)"}
+        </p>
+      )}
+      {error && (
+        <div className="sm:col-span-2 lg:col-span-4">
+          <FieldError>{error}</FieldError>
+        </div>
       )}
     </div>
   );

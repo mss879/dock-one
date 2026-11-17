@@ -1,5 +1,7 @@
 import Link from "next/link";
+import type { CardAvailability } from "@/lib/availability";
 import { discountPercent, productCardHref, type ProductCardData } from "@/lib/catalogue-shared";
+import { CompareButton } from "@/components/compare/CompareButton";
 import { Cross } from "@/components/ui/Cross";
 import { Price } from "@/components/ui/Price";
 import { AddToCartButton } from "./AddToCartButton";
@@ -20,8 +22,9 @@ export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-
         {off > 0 && <span className="label bg-lime px-2 py-1 font-bold text-ink">-{off}%</span>}
         {product.isNew && <span className="label bg-violet px-2 py-1 font-bold text-white">New</span>}
       </div>
-      <div className="absolute top-0 right-0 z-10">
+      <div className="absolute top-0 right-0 z-10 flex flex-col">
         <WishlistButton productId={product.id} productName={product.name} />
+        <CompareButton product={{ id: product.id, slug: product.slug, name: product.name, imageUrl: product.imageUrl, categoryId: product.categoryId }} />
       </div>
 
       <Link href={href} tabIndex={-1} aria-hidden className="bg-grid relative block aspect-square overflow-hidden border-b border-line bg-paper [--grid-size:24px]">
@@ -49,6 +52,7 @@ export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-
             <span className="font-semibold text-ink">{product.optionNote}</span>
           </p>
         )}
+        {product.availability && <AvailabilityLine availability={product.availability} />}
         <Rating value={product.ratingAvg} count={product.ratingCount} />
         <div className="mt-auto flex items-end justify-between gap-1 pt-2 sm:gap-2">
           <p className="font-mono leading-tight whitespace-nowrap tabular-nums">
@@ -59,5 +63,27 @@ export function ProductCard({ product, sizes = "(min-width: 1280px) 210px, (min-
         </div>
       </div>
     </article>
+  );
+}
+
+const DOT: Record<CardAvailability["status"], string> = {
+  in_stock: "bg-lime ring-1 ring-ink/30",
+  low_stock: "bg-lime ring-1 ring-ink/30",
+  to_order: "bg-violet",
+  preorder: "bg-violet",
+  out_of_stock: "bg-surface ring-1 ring-ink",
+};
+
+/** In stock / Available to order · the wait / Pre-order · the date / Out of stock (50). */
+export function AvailabilityLine({ availability }: { availability: CardAvailability }) {
+  const out = availability.status === "out_of_stock";
+  return (
+    <p className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
+      <span aria-hidden className={`size-2 shrink-0 rounded-full ${DOT[availability.status]}`} />
+      <span className={`truncate ${out ? "text-mute" : "font-medium text-ink-2"}`}>
+        {availability.label}
+        {availability.wait && <span className="font-normal text-mute"> · {availability.wait}</span>}
+      </span>
+    </p>
   );
 }

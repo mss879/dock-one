@@ -12,6 +12,7 @@ import {
   Layers,
   LockKeyhole,
   Mail,
+  MessageCircle,
   Package,
   Receipt,
   ReceiptText,
@@ -67,6 +68,7 @@ export type AdminTabKey =
   | "content"
   | "settings"
   | "site-lock"
+  | "whatsapp"
   | "staff";
 
 export type AdminTabOwner = "WP-A" | "WP-B" | "WP-C" | "WP-D" | "WP-E" | "WP-F" | "WP-G" | "WP-H" | "WP-I" | "WP-J" | "WP-K";
@@ -248,6 +250,15 @@ export const ADMIN_TABS: readonly AdminTabDef[] = [
     owner: "WP-E",
     summary: "Messages from the contact form: reply by email, mark answered, delete.",
     load: () => import("./tabs/InquiriesTab"),
+  },
+  {
+    key: "whatsapp",
+    label: "WhatsApp",
+    group: "Customers",
+    icon: MessageCircle,
+    owner: "WP-E",
+    summary: "WhatsApp Business in the admin: customers' messages, your replies and the AI assistant's answers. The owner connects it by pasting the Meta app's keys here.",
+    load: () => import("./tabs/WhatsappTab"),
   },
   {
     key: "subscribers",

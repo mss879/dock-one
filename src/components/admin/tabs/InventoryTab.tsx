@@ -3,6 +3,7 @@
 import { ArrowLeftRight, Download } from "lucide-react";
 import { useState } from "react";
 import { useAdminAccess } from "@/components/admin/access";
+import { StockAlertsPanel } from "@/components/admin/inventory/StockAlertsPanel";
 import { InlineNumber } from "@/components/admin/catalogue/InlineNumber";
 import { Thumb, categoryLabel, useCatalogueLookups } from "@/components/admin/catalogue/shared";
 import { getAdminTab } from "@/components/admin/registry";
@@ -162,6 +163,8 @@ export default function InventoryTab() {
 
       {list.error && <QueryError error={list.error} onRetry={list.refetch} feature="Inventory" className="mb-4" />}
       {lookups.error && !list.error && <QueryError error={lookups.error} onRetry={lookups.refetch} feature="Categories" className="mb-4" />}
+
+      <StockAlertsPanel canSend={canEdit} />
 
       <SectionCard padded={false}>
         <div className="p-4 pb-0">

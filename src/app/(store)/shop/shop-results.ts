@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  getCategorySpecs,
   getProductsByIds,
   getSoldOutProductIds,
   listProducts,
@@ -11,6 +12,7 @@ import {
   type ProductSort,
 } from "@/lib/catalogue";
 import { SHOP_PAGE_SIZE, type ShopQuery, type ShopSort } from "@/lib/catalogue-queries";
+import { hasSpecSelection, matchesSpecs } from "@/lib/spec-filters";
 
 export type ShopResults = {
   items: ProductCardData[];
@@ -53,13 +55,18 @@ export async function loadShopResults(query: ShopQuery): Promise<ShopResults> {
 
   const base = { page: query.page, pageSize, searchFailed: false, searchTotal: null, capped: false, stockFilterFailed };
 
+  // Spec filters (RAM, SSD, graphics…): the category's products whose specs match every facet.
+  const specsOn = query.category !== null && hasSpecSelection(query.specs);
+  const specIds = specsOn && query.category ? (await getCategorySpecs(query.category)).filter((p) => matchesSpecs(p.specs, query.specs)).map((p) => p.id) : null;
+  if (specIds && specIds.length === 0) return { ...base, items: [], total: 0 };
+
   if (!query.q) {
-    const list = await listProducts({ ...filters, excludeIds, sort: toProductSort(query.sort), page: query.page, pageSize });
+    const list = await listProducts({ ...filters, ...(specIds ? { ids: specIds } : {}), excludeIds, sort: toProductSort(query.sort), page: query.page, pageSize });
     return { ...base, items: list.items, total: list.total };
   }
 
   const refined =
-    query.sort !== "relevance" || query.category !== null || query.filter !== null || query.brands.length > 0 || query.min !== null || query.max !== null || excludeIds.length > 0;
+    query.sort !== "relevance" || query.category !== null || query.filter !== null || query.brands.length > 0 || query.min !== null || query.max !== null || excludeIds.length > 0 || specsOn;
 
   if (!refined) {
     const hits = await searchProductIds(query.q, { limit: pageSize, offset: (query.page - 1) * pageSize });
@@ -71,7 +78,8 @@ export async function loadShopResults(query: ShopQuery): Promise<ShopResults> {
   const ranked = await searchRankedProductIds(query.q);
   if (!ranked) return { ...base, items: [], total: 0, searchFailed: true };
   const excluded = new Set(excludeIds);
-  const ids = ranked.ids.filter((id) => !excluded.has(id));
+  const allowed = specIds ? new Set(specIds) : null;
+  const ids = ranked.ids.filter((id) => !excluded.has(id) && (!allowed || allowed.has(id)));
   const searched = { ...base, searchTotal: ranked.total, capped: ranked.capped };
   if (ids.length === 0) return { ...searched, items: [], total: 0 };
 

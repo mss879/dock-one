@@ -5,6 +5,7 @@ import {
   formatAmount,
   formatInvoiceDate,
   formatRs,
+  isFreeLine,
   type InvoiceForm,
   type InvoiceSettings,
 } from "@/lib/admin/invoices";
@@ -74,6 +75,7 @@ export const INVOICE_STYLES = `
 .inv-items .sub { display: block; margin-top: 0.7mm; font-size: 8pt; line-height: 1.3; color: #55616e; white-space: pre-line; overflow-wrap: anywhere; }
 .inv-items .wty { overflow-wrap: anywhere; }
 .inv-items tr.inv-none td { border-bottom: 0; padding: 7mm 2mm; text-align: center; font-style: italic; color: #8b96a2; }
+.inv-items .free { letter-spacing: 0.06em; color: #1e2d3d; }
 
 .inv-fill { flex: 1 1 auto; min-height: 4mm; }
 
@@ -99,6 +101,10 @@ export const INVOICE_STYLES = `
 .inv-notes .rule { width: 44%; height: 0.9mm; background: #fdbd25; margin: 1.2mm 0 2.2mm; }
 .inv-notes ol { padding-left: 4.6mm; font-size: 8pt; line-height: 1.4; }
 .inv-notes li { padding-left: 0.6mm; margin: 0 0 0.45mm; }
+
+.inv-sign { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20mm; margin-top: 11mm; break-inside: avoid; page-break-inside: avoid; flex: none; }
+.inv-sign .line { display: block; height: 11mm; border-bottom: 0.4mm dotted #1e2d3d; }
+.inv-sign p { margin-top: 1.8mm; text-align: center; font-size: 8.8pt; font-weight: 700; color: #1e2d3d; }
 
 .inv-closing { margin-top: 5.5mm; break-inside: avoid; page-break-inside: avoid; flex: none; }
 .inv-thanks { font-size: 18pt; font-weight: 700; font-style: italic; color: #1e2d3d; line-height: 1.15; }
@@ -188,14 +194,15 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
   const rows = lines.map((line, index) => {
     const amount = totals.lineAmounts[form.lines.indexOf(line)] ?? 0;
     const serials = cleanSerials(line.serialNumbers);
-    const subs = serials.length ? [`S/N: ${serials.join(", ")}`] : [];
+    const free = isFreeLine(line);
+    const subs = [...(free ? ["Complimentary"] : []), ...(serials.length ? [`S/N: ${serials.join(", ")}`] : [])];
     return html`<tr>
       <td class="c">${index + 1}</td>
       <td><span class="desc">${line.description.trim()}</span>${subs.length ? html`<span class="sub">${subs.join("\n")}</span>` : ""}</td>
       <td class="c wty">${line.warranty.trim()}</td>
       <td class="r">${line.quantity != null ? formatAmount(line.quantity) : ""}</td>
-      <td class="r">${line.unitPrice != null ? formatAmount(line.unitPrice) : ""}</td>
-      <td class="r">${formatAmount(amount)}</td>
+      <td class="r">${free ? html`<b class="free">FREE</b>` : line.unitPrice != null ? formatAmount(line.unitPrice) : ""}</td>
+      <td class="r">${free ? html`<b class="free">FREE</b>` : formatAmount(amount)}</td>
     </tr>`;
   });
 
@@ -267,6 +274,12 @@ export function renderInvoiceHtml({ form, settings, bank, logoUrl, paidOn = null
     </section>
     ${notes.length
       ? html`<section class="inv-notes"><h3>NOTES</h3><div class="rule" aria-hidden="true"></div><ol>${notes.map((note) => html`<li>${note}</li>`)}</ol></section>`
+      : ""}
+    ${form.showSignatureLines
+      ? html`<section class="inv-sign" aria-label="Signatures">
+          <div><span class="line"></span><p>Received in Good Order &amp; Condition</p></div>
+          <div><span class="line"></span><p>Authorised Signature</p></div>
+        </section>`
       : ""}
     <section class="inv-closing">
       ${settings.closingTitle ? html`<p class="inv-thanks">${settings.closingTitle}</p>` : ""}

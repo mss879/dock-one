@@ -40,6 +40,7 @@ export const STAFF_AREAS: readonly { key: string; label: string; hint?: string }
   { key: "content", label: "Pages & blog" },
   { key: "settings", label: "Store settings" },
   { key: "site-lock", label: "Site lock" },
+  { key: "whatsapp", label: "WhatsApp", hint: "View = read the chats; Edit = reply and send" },
   { key: "costs", label: "Cost prices", hint: "See (view) or change (edit) what items cost the store" },
 ];
 

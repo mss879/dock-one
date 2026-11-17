@@ -68,6 +68,19 @@ what to do right after, and how to check it worked.
 > `payments` secret: copy it into `PAYMENTS_SECRET` (query below). Re-run 49 after any re-run of 09 or
 > 40 (it replaces four of their functions).
 
+> **Added 2026-11-17 — seven new files: 50 to 56** (each safe to re-run; the client's November
+> website changes, items 1–3, plus WhatsApp). Run them **in number order, 50 → 56, after the
+> WebXPay live test is finished**: `50` replaces `place_order` (49's card-payment version plus
+> backorders). If you want the rest earlier, `51`–`56` may run first and `50` later — they touch
+> none of 50's functions. The new code works before and after each of them (every new screen says
+> which file to run while it is missing). `50` **availability** (In stock / Available to order /
+> Pre-order / Out of stock, wait times, Notify me, ordering beyond stock) · `51` accurate **"people
+> viewing"** · `52` the homepage **IT solutions** section (run it after the deploy) · `53`
+> **invoice extras** (signature lines, paid = final for staff, BONUS, sales staff, staff commission)
+> · `54` **WhatsApp Business** in the admin · `55` the **Instagram** strip on the homepage · `56`
+> the client's **quotation notes** (11 notes; quotations valid 7 days). Re-run 50 after any re-run
+> of 05, 09 or 49; 53 after 39, 40 or 44; 54 after 39.
+
 > **Added 2026-10-15 — one new file: run 38** (safe to re-run; needs 01–37): the **stock movement
 > ledger** and the two inventory reports (inventory value, product-wise stock movement) in
 > admin → Reports, plus **Record movement** in admin → Inventory. It posts every tracked variant's
@@ -660,6 +673,101 @@ for the hero phone images, invoice payment types, expenses and the real contact 
 - **Check:** `SELECT value FROM public.app_config WHERE name = 'payments';` (→ `PAYMENTS_SECRET`) ·
   `SELECT card_payments_enabled FROM public.store_settings;` · after a test payment:
   `SELECT o.id, o.payment_status, a.reference, a.status, a.gateway_message, a.review_reason FROM public.payment_attempts a JOIN public.orders o ON o.id = a.order_id ORDER BY a.created_at DESC LIMIT 10;`
+
+### 50 — Product availability, Notify me, backorders · `50_product_availability.sql`
+- **Adds:** `product_variants.availability` — how each variant is sold: `stock` (every existing
+  variant: In stock / Out of stock as before), `order` ("Available to order": can be ordered at 0 and
+  is sourced for the customer), `preorder` (always "Pre-order"), `unavailable` (always "Out of
+  stock") — plus `wait_min_days` / `wait_max_days` ("Ships in 7–10 days") and `available_on`
+  (a pre-order's expected date). `order_items.backorder_qty`: the units of a line still to come.
+  `stock_alerts` (Notify me requests; sealed) with `request_stock_alert` (shoppers, via
+  `/api/stock-alert`), `admin_take_stock_alerts` / `admin_return_stock_alerts` (the admin's "Email
+  them"). Replaces `quote_order`, `place_order` (49's + backorders: an order / pre-order line takes
+  what is on the shelf and the rest waits), `admin_set_order_status` (a cancel restocks only what
+  was taken from the shelf) and `list_in_stock_product_ids`; adds the trigger
+  `orders_40_allocate_backorders` (arriving stock is moved to waiting orders at their next status
+  change, before the hand-over, so 38's ledger stays true).
+- **Needs:** 01–49. Run again after any re-run of 05, 09 or 49.
+- **Switches on:** admin → Products → a product → Variants → **Availability** per variant; admin →
+  Inventory → **"Notify me" requests**; the availability line on cards and pages, "Notify me" on
+  out-of-stock products, "Pre-order" buttons, and "N ready now, the rest ordered in" in the basket.
+  Before 50: everything shows In stock / Out of stock as now, and the variant editor says to run 50.
+- **Check:** `SELECT availability, count(*) FROM public.product_variants GROUP BY 1;` (all `stock` at
+  first) · `SELECT o.id, oi.product_name, oi.quantity, oi.stock_reserved, oi.backorder_qty FROM public.order_items oi JOIN public.orders o ON o.id = oi.order_id WHERE oi.backorder_qty > 0;`
+
+### 51 — Accurate "people viewing" · `51_product_viewers.sql`
+- **Adds / replaces:** `ping_product_view` (42's) counts a browser for 45 seconds instead of 90, and
+  `leave_product_view` removes it at once when the page is hidden or closed. The page keeps one id
+  for all of a browser's tabs, so one person is one viewer.
+- **Needs:** 01, 04, 42. Run again after any re-run of 42.
+- **Check:** `SELECT has_function_privilege('anon', 'public.leave_product_view(integer,uuid)', 'EXECUTE');` → true.
+
+### 52 — Homepage IT solutions · `52_homepage_it_solutions.sql`
+- **Adds once:** the homepage block `it_solutions` (heading, text, six items linking to the
+  categories and the quotation page, a "Talk to us" button) — wording drawn only from what the store
+  already says; the client lists their actual IT services (see the client PDF). A re-run never
+  overwrites edits.
+- **Needs:** 01, 16. **Run after the deploy** (before it, the block is stored but not shown).
+- **Switches on:** the dark "IT solutions for your business" section under the trust row; edit it in
+  admin → Homepage & navbar → Content blocks → **IT solutions**.
+- **Check:** `SELECT data ->> 'title', jsonb_array_length(data -> 'items') FROM public.content_blocks WHERE key = 'it_solutions';`
+
+### 53 — Invoice extras and staff commission · `53_invoice_extras.sql`
+- **Adds:** `invoices.show_signature_lines` (two dotted lines: "Received in Good Order & Condition"
+  and "Authorised Signature"; the default is `invoice_settings.default_show_signature_lines`),
+  `invoices.bonus` (internal — never printed) and `invoices.sales_staff_id` (who the sale counts
+  for; empty = whoever made it), `staff_accounts.commission_percent`. Triggers
+  `invoices_15_paid_lock` / `invoice_items_15_paid_lock`: an issued invoice marked **paid** is final —
+  staff can't change it or its lines (the owner still can; payments, receipts and the system's own
+  bookkeeping still work). Replaces `admin_save_document` (44's) and `admin_list_staff` (39's); adds
+  `admin_set_staff_commission`, `admin_staff_names` and the owner-only
+  `admin_staff_commission_report` (sales before VAT / tax after discounts × the person's %, plus
+  bonuses).
+- **Needs:** 26, 28, 39, 40, 44. Run again after any re-run of 39, 40 or 44.
+- **Switches on:** invoice editor → "Print signature lines", **BONUS (internal)** and **Sales staff**
+  (owner) under Invoice details; Template & numbering → the default; Staff → **Commission %**;
+  Reports → **Staff commission**. Before 53 the editor works as now.
+- **Check:** `SELECT tgname FROM pg_trigger WHERE tgname LIKE '%paid_lock%';` (2 rows) ·
+  `SELECT display_name, commission_percent FROM public.staff_accounts;`
+
+### 54 — WhatsApp Business · `54_whatsapp.sql`
+- **Adds:** `whatsapp_settings` (one sealed row: the Meta app's phone number id, business account
+  id, access token and app secret — the token and secret are write-only — a generated webhook
+  verify token, AI on/off and pause, the invoice template), `whatsapp_conversations`,
+  `whatsapp_messages`; the owner's `admin_whatsapp_status`, `admin_save_whatsapp_settings`,
+  `admin_whatsapp_connection_result`; `whatsapp_send_credentials` (keys only to the owner or to
+  staff through the site's server), `admin_whatsapp_record_outbound`,
+  `admin_whatsapp_update_conversation`, `admin_whatsapp_window` (Meta's 24-hour rule); Meta's
+  webhook: `whatsapp_verify_webhook`, `whatsapp_receive` (checks Meta's signature with the app
+  secret before storing anything), `whatsapp_record_ai_reply`. A new staff section **WhatsApp**
+  (replaces 39's `_staff_area_keys`).
+- **Needs:** 01, 02, 09, 26, 39, 40. Run again after any re-run of 39.
+- **Switches on:** admin → **WhatsApp** (keys form → webhook details → chats); "WhatsApp" on issued
+  invoices sends the PDF through the store's number. Nothing is sent or received until the owner adds
+  the keys (`docs/WHATSAPP_SETUP.md`). No server environment variables.
+- **Check:** `SELECT phone_number_id, access_token IS NOT NULL AS token_set, app_secret IS NOT NULL AS secret_set, connected_at, last_webhook_at FROM public.whatsapp_settings;`
+
+### 55 — Instagram on the homepage · `55_instagram_feed.sql`
+- **Adds:** `instagram_settings` (one sealed row: the token — write-only — the account name and the
+  latest posts), `get_instagram_feed` (public: the kept posts while switched on),
+  `admin_instagram_status`, `admin_save_instagram` (owner), `admin_instagram_token` (owner, or staff
+  with Homepage → edit through the site's server), `admin_instagram_store`.
+- **Needs:** 01, 02, 39.
+- **Switches on:** admin → Homepage & navbar → **Instagram** (paste the token, switch it on); the
+  "Follow us on Instagram" strip above the newsletter. The admin refreshes the posts itself about
+  twice a day while open. `docs/INSTAGRAM_SETUP.md` says how to get the token.
+- **Check:** `SELECT enabled, access_token IS NOT NULL AS token_set, username, jsonb_array_length(posts), fetched_at, last_error FROM public.instagram_settings;`
+
+### 56 — The client's quotation notes · `56_quotation_notes.sql`
+- **Sets once:** `invoice_settings.quote_notes` to the client's eleven notes ("3) Quotation notes",
+  November 2026 — its line 6 "or law applies." joined back into note 5, and "until stock last" →
+  "until stock lasts") and `quote_valid_days` 14 → **7** (note 1: "valid for 7 days"). Marker
+  `docs_56_quote_notes`: a re-run never overwrites later edits.
+- **Needs:** 26, 40. Any time, before or after the deploy.
+- **Switches on:** every NEW quotation — made in the admin or requested on the website — prints the
+  notes under NOTES and is valid 7 days. Quotations already made keep their own notes. Both stay
+  editable: open a quotation in the admin → Template.
+- **Check:** `SELECT quote_valid_days, cardinality(quote_notes), quote_notes[1] FROM public.invoice_settings;` → 7 · 11 · "This quotation is valid for 7 days …"
 
 ---
 

@@ -406,7 +406,16 @@ export function buildTools(ctx: ToolContext) {
               name: productLabel(p),
               variants: bands.map((b) => ({
                 variant: b.variant,
-                availability: b.state === "out" ? "out of stock" : b.state === "low" ? `low — only ${b.left} left` : "in stock",
+                availability:
+                  b.state === "out"
+                    ? "out of stock (the product page has “Notify me”)"
+                    : b.state === "low"
+                      ? `low — only ${b.left} left`
+                      : b.state === "order"
+                        ? `available to order${b.wait ? ` — ${b.wait.toLowerCase()}` : ""}`
+                        : b.state === "preorder"
+                          ? `pre-order${b.wait ? ` — ${b.wait.toLowerCase()}` : ""}`
+                          : "in stock",
               })),
             };
           }),

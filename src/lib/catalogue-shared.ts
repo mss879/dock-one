@@ -8,6 +8,7 @@
  * next/image throw), products with no active variant are not purchasable.
  */
 
+import { cardAvailability, variantAvailabilityFromRow, type CardAvailability, type VariantAvailability } from "@/lib/availability";
 import { supabaseStoragePublicPrefix } from "@/lib/env";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ export type ProductCardData = {
    */
   linkVariantId?: number | null;
   optionNote?: string | null;
+  /**
+   * In stock / Available to order / Pre-order / Out of stock, with the wait (50) — the best of the
+   * card's options. Absent when it isn't known (the stock couldn't be read): the card then says
+   * nothing rather than guess.
+   */
+  availability?: CardAvailability | null;
 };
 
 export type ProductVariant = {
@@ -62,7 +69,12 @@ export type ProductVariant = {
   compareAtPrice: number | null;
   position: number;
   weightG: number | null;
+  /** How the option is sold (50): stock / order / preorder / unavailable, with its wait. */
+  availability: VariantAvailability;
 };
+
+/** Tracked variants' stock from get_product_availability (05): absent = not tracked (always sells). */
+export type StockMap = ReadonlyMap<number, { level: number; low: boolean }>;
 
 export type SpecValue = string | number | boolean | string[] | null;
 
@@ -274,6 +286,7 @@ export function normalizeVariant(row: Row): ProductVariant | null {
     compareAtPrice: compareAtOrNull(row.compare_at_price, price),
     position: toNumber(row.position, 0),
     weightG: toNullableNumber(row.weight_g),
+    availability: variantAvailabilityFromRow(row),
   };
 }
 
@@ -292,8 +305,11 @@ function embeddedName(value: unknown): string | null {
   return row && typeof row === "object" ? toText((row as Row).name, 120) : null;
 }
 
-/** Row from PRODUCT_CARD_FIELDS → ProductCardData (null when the row is unusable). */
-export function normalizeProductCard(row: Row): ProductCardData | null {
+/**
+ * Row from PRODUCT_CARD_FIELDS → ProductCardData (null when the row is unusable). `stock` (the
+ * tracked variants' stock, or null when it couldn't be read) adds the card's availability line.
+ */
+export function normalizeProductCard(row: Row, stock?: StockMap | null): ProductCardData | null {
   const id = toNumber(row.id, 0);
   const slug = typeof row.slug === "string" ? row.slug : "";
   const name = toText(row.name, 200);
@@ -330,6 +346,9 @@ export function normalizeProductCard(row: Row): ProductCardData | null {
     defaultVariantId: defaultVariant?.id ?? null,
     defaultVariantName: defaultVariant?.name ?? null,
     variantCount: variants.length,
+    ...(stock !== undefined
+      ? { availability: cardAvailability(variants.map((v) => ({ availability: v.availability, stock: stock === null ? undefined : (stock.get(v.id) ?? null) }))) }
+      : {}),
   };
 }
 
@@ -339,10 +358,10 @@ export function normalizeProductCard(row: Row): ProductCardData | null {
  * the product page on it. null when none of the picked variants is on sale (switched off or
  * gone) — the product then isn't shown in that collection at all, never with its other variants.
  */
-export function normalizeProductCardPick(row: Row, variantIds: readonly number[]): ProductCardData | null {
+export function normalizeProductCardPick(row: Row, variantIds: readonly number[], stock?: StockMap | null): ProductCardData | null {
   const picked = new Set(variantIds);
   const variants = Array.isArray(row.variants) ? (row.variants as unknown[]).filter((v) => Boolean(v) && typeof v === "object" && picked.has(toNumber((v as Row).id, 0))) : [];
-  const card = normalizeProductCard({ ...row, variants });
+  const card = normalizeProductCard({ ...row, variants }, stock);
   if (!card || card.variantCount === 0) return null;
   const names = activeVariants(variants).map((variant) => variant.name);
   return { ...card, linkVariantId: card.defaultVariantId, optionNote: names.join(" · ") };

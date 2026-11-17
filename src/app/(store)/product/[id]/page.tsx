@@ -25,6 +25,7 @@ import {
   toProductId,
   type ProductDetail,
 } from "@/lib/catalogue";
+import { variantAvailability } from "@/lib/availability";
 import { pad2 } from "@/lib/format";
 import { getStoreSettings } from "@/lib/settings";
 
@@ -79,8 +80,13 @@ async function offerAvailability(product: ProductDetail): Promise<JsonLdAvailabi
   if (product.variants.length === 0) return "OutOfStock";
   const result = await fetchAvailability([product.id]);
   if (!result.ok) return null;
-  const tracked = new Map(result.rows.map((row) => [row.variantId, row.stockLevel]));
-  return product.variants.some((variant) => (tracked.get(variant.id) ?? 1) > 0) ? "InStock" : "OutOfStock";
+  const tracked = new Map(result.rows.map((row) => [row.variantId, { level: row.stockLevel, low: row.low }]));
+  // Not in the rows = not stock-tracked (always sells). 50: "Pre-order" / "Available to order" options.
+  const statuses = product.variants.map((variant) => variantAvailability(variant.availability, tracked.get(variant.id) ?? null).status);
+  if (statuses.some((status) => status === "in_stock" || status === "low_stock")) return "InStock";
+  if (statuses.includes("to_order")) return "BackOrder";
+  if (statuses.includes("preorder")) return "PreOrder";
+  return "OutOfStock";
 }
 
 export default async function ProductPage({ params }: Params) {

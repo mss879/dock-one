@@ -10,11 +10,15 @@
  *   ?brand=<name>(&brand=…)    brand refinement (repeatable)
  *   ?min=<LKR>&max=<LKR>       from-price range, whole rupees
  *   ?stock=in                  in stock only
+ *   ?spec_<facet>=a,b          spec filters of the category (lib/spec-filters.ts): spec_ram, spec_ssd,
+ *                              spec_gpu, spec_screen, spec_touch, spec_os, spec_condition,
+ *                              spec_capacity, spec_refresh
  *   ?sort=featured|newest|price_asc|price_desc|rating|relevance   (relevance only with q)
  *   ?page=<n>                  1-based; page 1 drops the param
  */
 
 import { isSlug } from "@/lib/catalogue-shared";
+import { hasSpecSelection, parseSpecSelection, SPEC_FACET_KEYS, specParam, type SpecSelection } from "@/lib/spec-filters";
 
 export const SHOP_PATH = "/shop";
 export const SHOP_PAGE_SIZE = 24;
@@ -48,6 +52,8 @@ export type ShopQuery = {
   min: number | null;
   max: number | null;
   inStock: boolean;
+  /** Spec filters (only with a category that has them). */
+  specs: SpecSelection;
   sort: ShopSort;
   page: number;
 };
@@ -116,14 +122,15 @@ export function parseShopQuery(raw: RawSearchParams): ShopQuery {
     min,
     max,
     inStock: first(raw.stock) === "in",
+    specs: categoryRaw && isSlug(categoryRaw) ? parseSpecSelection((name) => all(raw[name]).join(",") || undefined) : {},
     sort,
     page,
   };
 }
 
-/** Brand / price / stock refinements are on (the "clear filters" state). */
+/** Brand / price / stock / spec refinements are on (the "clear filters" state). */
 export function hasRefinements(query: ShopQuery): boolean {
-  return query.brands.length > 0 || query.min !== null || query.max !== null || query.inStock;
+  return query.brands.length > 0 || query.min !== null || query.max !== null || query.inStock || hasSpecSelection(query.specs ?? {});
 }
 
 /**
@@ -143,6 +150,12 @@ export function shopHref(query: Partial<ShopQuery> = {}, patch: Partial<ShopQuer
   if (typeof next.min === "number") params.set("min", String(next.min));
   if (typeof next.max === "number") params.set("max", String(next.max));
   if (next.inStock) params.set("stock", "in");
+  if (next.category) {
+    for (const key of SPEC_FACET_KEYS) {
+      const values = next.specs?.[key];
+      if (values?.length) params.set(specParam(key), [...values].sort().join(","));
+    }
+  }
   const sort = next.sort;
   if (sort && sort !== defaultShopSort({ q, filter: next.filter ?? null }) && !(sort === "relevance" && !q)) params.set("sort", sort);
   if (next.page && next.page > 1) params.set("page", String(next.page));

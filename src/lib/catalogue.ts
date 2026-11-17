@@ -13,6 +13,7 @@ import {
   normalizeProductArt,
   normalizeProductCard,
   normalizeProductCardPick,
+  normalizeAttributes,
   normalizeProductDetail,
   toNumber,
   toProductId,
@@ -24,6 +25,8 @@ import {
   type ProductArt,
   type ProductCardData,
   type ProductDetail,
+  type SpecValue,
+  type StockMap,
 } from "@/lib/catalogue-shared";
 
 export * from "@/lib/catalogue-shared";
@@ -51,19 +54,40 @@ type Row = Record<string, unknown>;
 export const PRODUCT_CARD_FIELDS: string =
   "id, slug, name, brand, subtitle, category_id, price, compare_at_price, default_variant_id, variant_count, image_url, cutout_url, rating_avg, rating_count, is_new, is_flash_deal, is_bestseller, is_featured, sort_order, created_at, " +
   "category:categories!category_id(name), " +
-  "variants:product_variants!inner(id, name, price, compare_at_price, position, is_active)";
+  // `*`: the variants' availability columns (50) are read once 50 is applied, and the query works without them.
+  "variants:product_variants!inner(*)";
 
 /** Product page: card fields + gallery, attributes, SEO, full variant rows (not inner: a product mid-edit still resolves). */
 export const PRODUCT_DETAIL_FIELDS: string =
   "id, slug, name, brand, subtitle, description, category_id, price, compare_at_price, default_variant_id, variant_count, image_url, image_urls, cutout_url, tags, attributes, warranty_months, rating_avg, rating_count, is_new, is_flash_deal, is_bestseller, is_featured, sort_order, seo_title, seo_description, created_at, updated_at, " +
   "category:categories!category_id(name), " +
-  "variants:product_variants(id, sku, name, option_values, price, compare_at_price, position, is_active, weight_g)";
+  "variants:product_variants(*)";
 
 const PRODUCT_ART_FIELDS: string = "id, slug, name, category_id, image_url, cutout_url";
 const CATEGORY_FIELDS: string = "id, name, tagline, description, stage_image_url, hero_product_id, scene, sort_order, seo_title, seo_description";
 const COLLECTION_FIELDS: string = "id, title, subtitle, description, cover_image, type, kind, sort_order, is_featured, feature_product_ids, seo_title, seo_description";
 
 const TAGS = { tags: [CACHE_TAGS.catalogue] };
+
+/**
+ * The tracked variants' stock for these products (get_product_availability, 24 per call) — the
+ * cards' availability line (50). null when it can't be read: the cards then say nothing about
+ * stock rather than guess. Read inside the cached list readers, so a card's stock line is at most
+ * as old as the list (the 5-minute safety net); the product page and checkout read it live.
+ */
+async function readStockMap(productIds: number[]): Promise<StockMap | null> {
+  const ids = [...new Set(productIds)].sort((a, b) => a - b);
+  const map = new Map<number, { level: number; low: boolean }>();
+  for (let i = 0; i < ids.length; i += 24) {
+    const result = await fetchAvailability(ids.slice(i, i + 24));
+    if (!result.ok) {
+      logDbError("catalogue.readStockMap", result.error, INVENTORY_MIGRATION);
+      return null;
+    }
+    for (const row of result.rows) map.set(row.variantId, { level: row.stockLevel, low: row.low });
+  }
+  return map;
+}
 const db = (): SupabaseClient => createServerSupabase();
 const rowsOf = (data: unknown): Row[] => (Array.isArray(data) ? (data as Row[]) : []);
 const rowOf = (data: unknown): Row | null => (data && typeof data === "object" && !Array.isArray(data) ? (data as Row) : null);
@@ -182,6 +206,8 @@ export type ProductFilters = {
 
 /** Cap for `excludeIds` (they travel in the PostgREST URL). */
 export const MAX_EXCLUDE_IDS = 500;
+/** Cap for `ids` (a search's ranked ids, or the products a spec filter matched). */
+export const MAX_FILTER_IDS = 500;
 
 export type ProductList = { items: ProductCardData[]; total: number; page: number; pageSize: number };
 
@@ -205,7 +231,7 @@ function normalizeFilters(filters: ProductFilters = {}): NormalizedFilters {
     const n = typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
     return n;
   };
-  const ids = Array.isArray(filters.ids) ? [...new Set(filters.ids.filter((id) => Number.isInteger(id) && id > 0))].sort((a, b) => a - b).slice(0, 100) : null;
+  const ids = Array.isArray(filters.ids) ? [...new Set(filters.ids.filter((id) => Number.isInteger(id) && id > 0))].sort((a, b) => a - b).slice(0, MAX_FILTER_IDS) : null;
   return {
     categoryId: isSlug(filters.categoryId) ? filters.categoryId : null,
     brands: [...new Set((filters.brands ?? []).map((b) => toText(b, 120)).filter((b): b is string => b !== null))].sort().slice(0, 20),
@@ -302,10 +328,12 @@ const readProductList = cached(
       throwDbError("catalogue.listProducts", error, MIGRATION);
     }
 
-    let items = rowsOf(data)
+    const rows = rowsOf(data);
+    const stock = await readStockMap(rows.map((row) => toNumber(row.id, 0)).filter((id) => id > 0));
+    let items = rows
       .map((row) => {
         const pick = picks.get(toNumber(row.id, 0));
-        return pick ? normalizeProductCardPick(row, pick) : normalizeProductCard(row);
+        return pick ? normalizeProductCardPick(row, pick, stock) : normalizeProductCard(row, stock);
       })
       .filter((p): p is ProductCardData => p !== null && p.variantCount > 0);
     let total = count ?? items.length;
@@ -320,7 +348,7 @@ const readProductList = cached(
     }
     return { items, total, page: f.page, pageSize: f.pageSize };
   },
-  ["catalogue:list:v3"],
+  ["catalogue:list:v4"],
   TAGS,
 );
 
@@ -334,11 +362,13 @@ const readProductsByIds = cached(
   async (ids: number[]): Promise<ProductCardData[]> => {
     const { data, error } = await db().from("products").select(PRODUCT_CARD_FIELDS).eq("is_active", true).in("id", ids);
     if (error) throwDbError("catalogue.getProductsByIds", error, MIGRATION);
-    return rowsOf(data)
-      .map(normalizeProductCard)
+    const rows = rowsOf(data);
+    const stock = await readStockMap(rows.map((row) => toNumber(row.id, 0)).filter((id) => id > 0));
+    return rows
+      .map((row) => normalizeProductCard(row, stock))
       .filter((p): p is ProductCardData => p !== null && p.variantCount > 0);
   },
-  ["catalogue:by-ids:v1"],
+  ["catalogue:by-ids:v2"],
   TAGS,
 );
 
@@ -736,6 +766,27 @@ export async function getSoldOutProductIds(): Promise<number[] | null> {
   if (!visible || !inStock) return null;
   const available = new Set(inStock);
   return visible.filter((id) => !available.has(id));
+}
+
+// Spec filters (lib/spec-filters.ts): the visible products of a category with their specs.
+
+const readCategorySpecs = cached(
+  async (categoryId: string): Promise<{ id: number; specs: Record<string, SpecValue> }[]> => {
+    const sb = db();
+    const rows = await selectAllRows(
+      (from, to) => sb.from("products").select("id, attributes").eq("is_active", true).gt("variant_count", 0).eq("category_id", categoryId).order("id").range(from, to),
+      "catalogue.categorySpecs",
+      5000,
+    );
+    return rows.map((row) => ({ id: toNumber(row.id, 0), specs: normalizeAttributes(row.attributes).specs })).filter((row) => row.id > 0);
+  },
+  ["catalogue:category-specs:v1"],
+  TAGS,
+);
+
+/** The category's products with their specs (for spec facets and matching); [] on failure. */
+export function getCategorySpecs(categoryId: string): Promise<{ id: number; specs: Record<string, SpecValue> }[]> {
+  return isSlug(categoryId) ? readFailSoft("catalogue.categorySpecs", () => readCategorySpecs(categoryId), []) : Promise.resolve([]);
 }
 
 // Related products (blueprint §9.1): same brand → same category → the wider catalogue.

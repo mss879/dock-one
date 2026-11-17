@@ -21,8 +21,9 @@ const SESSION_AREAS = ["/customer", "/wishlist", "/checkout", "/order", "/admin"
 /**
  * Never locked (§6.1): the admin and its APIs, the lock's own unlock route, job endpoints (they
  * authenticate with their own secret), the auth callback (confirm/reset links), the holding page,
- * and WebXPay's Return URL (the shopper's browser arrives from WebXPay without our unlock cookie;
- * the route verifies WebXPay's signature itself).
+ * WebXPay's Return URL (the shopper's browser arrives from WebXPay without our unlock cookie;
+ * the route verifies WebXPay's signature itself) and Meta's WhatsApp webhook (its signature is
+ * checked by the database — 54_whatsapp).
  */
 const ALWAYS_OPEN = [
   "/admin",
@@ -31,6 +32,7 @@ const ALWAYS_OPEN = [
   "/api/cart-recovery",
   "/api/maintenance",
   "/api/payments/webxpay/webhook",
+  "/api/whatsapp/webhook",
   "/auth",
   "/launching-soon",
 ];

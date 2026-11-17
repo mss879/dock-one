@@ -1,10 +1,10 @@
 "use client";
 
-import { KeyRound, UserPlus } from "lucide-react";
+import { KeyRound, Percent, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { STAFF_AREAS, STANDARD_STAFF_PERMISSIONS, useAdminAccess, type AccessLevel } from "@/components/admin/access";
 import { getAdminTab } from "@/components/admin/registry";
-import { AdminButton, AdminNotice, DataTable, DateTime, Field, Input, Modal, QueryError, SectionCard, StatusBadge, TabHeader, Toggle } from "@/components/admin/ui";
+import { AdminButton, AdminNotice, ConfirmDialog, DataTable, DateTime, Field, Input, Modal, NumberInput, QueryError, SectionCard, StatusBadge, TabHeader, Toggle } from "@/components/admin/ui";
 import { AdminDataError, useAdminQuery } from "@/lib/admin/query";
 import { toastResult } from "@/lib/admin/toast";
 import { adminRpc } from "@/lib/admin/write";
@@ -18,7 +18,17 @@ import { adminRpc } from "@/lib/admin/write";
 
 const MIGRATION = "39_staff_accounts.sql";
 
-type Staff = { userId: string; email: string; name: string; permissions: Record<string, AccessLevel>; isActive: boolean; lastSignInAt: string | null; createdAt: string | null };
+type Staff = {
+  userId: string;
+  email: string;
+  name: string;
+  permissions: Record<string, AccessLevel>;
+  isActive: boolean;
+  lastSignInAt: string | null;
+  createdAt: string | null;
+  /** 53: the % of their sales paid as commission (null = none); undefined before 53 is applied. */
+  commissionPercent?: number | null;
+};
 type Editing = { userId: string | null; email: string; name: string; password: string; permissions: Record<string, AccessLevel>; isActive: boolean };
 
 function fromRow(r: Record<string, unknown>): Staff {
@@ -33,6 +43,7 @@ function fromRow(r: Record<string, unknown>): Staff {
     isActive: r.is_active !== false,
     lastSignInAt: typeof r.last_sign_in_at === "string" ? r.last_sign_in_at : null,
     createdAt: typeof r.created_at === "string" ? r.created_at : null,
+    ...("commission_percent" in r ? { commissionPercent: r.commission_percent == null ? null : Number(r.commission_percent) } : {}),
   };
 }
 
@@ -92,6 +103,8 @@ export default function StaffTab() {
   const [error, setError] = useState<string | null>(null);
   const [passwordFor, setPasswordFor] = useState<Staff | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [commissionFor, setCommissionFor] = useState<Staff | null>(null);
+  const [commission, setCommission] = useState<number | null>(null);
 
   const list = useAdminQuery(
     async ({ supabase, signal }) => {
@@ -178,9 +191,28 @@ export default function StaffTab() {
             { key: "access", header: "Can open", hideBelow: "md", cell: (r) => <span className="text-[13px] text-adm-ink-2">{summary(r.permissions)}</span> },
             { key: "last", header: "Last sign-in", hideBelow: "lg", cell: (r) => (r.lastSignInAt ? <DateTime value={r.lastSignInAt} /> : <span className="text-adm-mute">Never</span>) },
             { key: "status", header: "Status", cell: (r) => (r.isActive ? <StatusBadge tone="success">Active</StatusBadge> : <StatusBadge tone="neutral">Switched off</StatusBadge>) },
+            ...((list.data ?? []).some((r) => r.commissionPercent !== undefined)
+              ? [
+                  {
+                    key: "commission",
+                    header: "Commission",
+                    align: "right" as const,
+                    cell: (r: Staff) => (r.commissionPercent != null ? <span className="font-mono tabular-nums">{r.commissionPercent}%</span> : <span className="text-adm-mute">—</span>),
+                  },
+                ]
+              : []),
           ]}
           actions={[
             { label: "Edit access", onClick: (r) => setEditing({ userId: r.userId, email: r.email, name: r.name, password: "", permissions: { ...r.permissions }, isActive: r.isActive }) },
+            {
+              label: "Commission %",
+              icon: <Percent aria-hidden className="size-3.5" />,
+              hidden: (r) => r.commissionPercent === undefined,
+              onClick: (r) => {
+                setCommission(r.commissionPercent ?? null);
+                setCommissionFor(r);
+              },
+            },
             {
               label: "Set password",
               icon: <KeyRound aria-hidden className="size-3.5" />,
@@ -193,6 +225,28 @@ export default function StaffTab() {
           empty={{ title: "No staff accounts yet", description: "Add one: name, email, a password and the sections they may open." }}
         />
       </SectionCard>
+
+      <ConfirmDialog
+        open={commissionFor != null}
+        onClose={() => setCommissionFor(null)}
+        title={`Commission for ${commissionFor?.name ?? "this staff member"}`}
+        description="The % of their sales (before VAT / tax, after discounts) paid as commission. Bonuses set on invoices are added on top. Leave empty for no commission. Reports → Staff commission adds it up for any dates."
+        confirmLabel="Save commission"
+        onConfirm={async () => {
+          if (!commissionFor) return { ok: false, message: "Nothing to save." };
+          if (commission != null && (commission < 0 || commission > 100)) return { ok: false, message: "Commission is 0 to 100%." };
+          const result = await adminRpc("admin_set_staff_commission", { p_user_id: commissionFor.userId, p_percent: commission }, { migration: "53_invoice_extras.sql" });
+          if (result.ok) {
+            toastResult(result, { success: "Commission saved", failure: "" });
+            list.refetch();
+          }
+          return result;
+        }}
+      >
+        <Field label="Commission" optional hint="Up to 2 decimals, e.g. 2.5">
+          <NumberInput value={commission} integer={false} min={0} max={100} suffix="%" onChange={setCommission} />
+        </Field>
+      </ConfirmDialog>
 
       <Modal
         open={editing != null}

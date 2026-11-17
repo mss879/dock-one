@@ -9,6 +9,7 @@ import { safeAdminRedirect } from "@/lib/admin/redirect";
 import { adminToast } from "@/lib/admin/toast";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 import { AdminAccessProvider, accessHelpers, type AdminAccess } from "./access";
+import { InstagramAutoRefresh } from "./homepage/InstagramPanel";
 import { ImageAutoCheck } from "./ImageAutoCheck";
 import { DueAlertBar } from "./invoices/DueAlertBar";
 import { ADMIN_TABS, adminTabHref, adminTabsByGroup, resolveAdminTab, tabAllowed, type AdminTabDef } from "./registry";
@@ -317,6 +318,7 @@ export function AdminChrome({ access, children }: { access: AdminAccess; childre
           <AdminAccessProvider access={access}>
             {(helpers.can("invoices") || helpers.can("receipts")) && <DueAlertBar />}
             {helpers.isAdmin && <ImageAutoCheck />}
+            {helpers.can("homepage", "edit") && <InstagramAutoRefresh />}
             {children}
           </AdminAccessProvider>
         </main>

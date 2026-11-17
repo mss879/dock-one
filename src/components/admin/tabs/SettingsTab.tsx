@@ -189,7 +189,7 @@ export default function SettingsTab() {
       )}
 
       <div className="grid gap-5">
-        <SectionCard title="Delivery & pickup" description="The rule the checkout charges — place_order and the basket read this same row, so a change applies to the next order at once." footer={footer}>
+        <SectionCard id="settings-delivery" title="Delivery & pickup" description="The rule the checkout charges — place_order and the basket read this same row, so a change applies to the next order at once." footer={footer}>
           <div className="grid gap-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Delivery fee" required hint="Charged when the basket (before any discount) is under the threshold. 0 = delivery is always free." error={error("deliveryFee")}>
@@ -411,7 +411,7 @@ export default function SettingsTab() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Returns & warranty" description="Used by the product pages, the basket and the homepage lines that mention the returns window." footer={footer}>
+        <SectionCard id="settings-returns" title="Returns & warranty" description="Used by the product pages, the basket and the homepage lines that mention the returns window." footer={footer}>
           <div className="grid gap-4 sm:grid-cols-[12rem_1fr]">
             <Field label="Returns window" required hint="0 = no returns window is promised." error={error("returnsWindowDays")}>
               <NumberInput value={form.returnsWindowDays} onChange={(returnsWindowDays) => update({ returnsWindowDays })} min={0} max={365} suffix="days" />

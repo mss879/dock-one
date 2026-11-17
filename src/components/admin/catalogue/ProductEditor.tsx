@@ -1,5 +1,6 @@
 "use client";
 
+import { site } from "@/data/site";
 import { Save, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/components/admin/ui";
 import {
   buildProductSave,
+  buildAvailabilitySave,
   buildSerialSave,
   CATALOGUE_MIGRATION,
   emptyProductForm,
@@ -45,7 +47,7 @@ import {
 import { useAdminQuery } from "@/lib/admin/query";
 import { removeImage } from "@/lib/admin/storage";
 import { adminToast, toastResult } from "@/lib/admin/toast";
-import { adminRpc, deleteRows } from "@/lib/admin/write";
+import { adminRpc, deleteRows, updateRows } from "@/lib/admin/write";
 import { categoryLabel, CharCount, SectionNav, UploadWaitStatus, useUploadsBusy } from "./shared";
 import { SpecsEditor } from "./SpecsEditor";
 import { VariantsEditor } from "./VariantsEditor";
@@ -205,6 +207,14 @@ export function ProductEditor({
     if (serials.length) {
       const serialResult = await adminRpc<unknown>("admin_set_product_serials", { p_product_id: outcome.product_id, p_variants: serials }, SERIALS_WRITE);
       if (!serialResult.ok) adminToast.error("Serial numbers not saved", `${serialResult.message} The rest of the product was saved — fix the serials and save again.`);
+    }
+    // How each variant is sold (50): in stock / to order / pre-order / unavailable, with the wait.
+    for (const change of buildAvailabilitySave(form, outcome.variants.map((v) => v.id))) {
+      const availabilityResult = await updateRows("product_variants", change.patch, { id: change.id }, { ...PRODUCT_TABLE_WRITE, select: "id" });
+      if (!availabilityResult.ok) {
+        adminToast.error("Availability not saved", `${availabilityResult.message} The rest of the product was saved.`);
+        break;
+      }
     }
     setSaving(false);
     if (outcome.deactivated_variant_ids?.length) {
@@ -427,6 +437,7 @@ export function ProductEditor({
                 newKey={newKey}
                 disabled={disabled}
                 serialsSupported={form.serialsSupported}
+                availabilitySupported={form.availabilitySupported}
               />
             </SectionCard>
 
@@ -502,8 +513,9 @@ export function ProductEditor({
             </SectionCard>
 
             {/* ── SEO ────────────────────────────────────────────────── */}
-            <SectionCard id="product-seo" title="SEO" description="Leave empty to use the product's name and description.">
+            <SectionCard id="product-seo" title="SEO" description="What Google shows for this product. Leave empty to use the product's name and description.">
               <div className="grid gap-4">
+                <SeoPreview form={form} />
                 <Field label="SEO title" optional error={fieldError("seoTitle")} hint={<CharCount value={form.seoTitle} max={120} />}>
                   <Input value={form.seoTitle} maxLength={120} disabled={disabled} onChange={(event) => update({ seoTitle: event.target.value })} />
                 </Field>
@@ -535,5 +547,39 @@ export function ProductEditor({
       </ConfirmDialog>
       {confirmElement}
     </Drawer>
+  );
+}
+
+/** Google shows about 60 characters of a title and about 155 of a description. */
+const SEO_TITLE_SHOWN = 60;
+const SEO_DESCRIPTION_SHOWN = 155;
+
+/**
+ * A search-result preview (Website changes, November 2026 — "Product SEO: show how to edit SEO
+ * titles and meta descriptions"): the same title and description the product page sends
+ * (app/(store)/product/[id]/page.tsx — the SEO title, else the name with its brand; the SEO
+ * description, else the description or subtitle, cut at 155 characters), with the site name the
+ * layout adds after every title.
+ */
+function SeoPreview({ form }: { form: ProductForm }) {
+  const name = form.name.trim() || "Product name";
+  const brand = form.brand.trim();
+  const base = form.seoTitle.trim() || (brand && !name.toLowerCase().startsWith(brand.toLowerCase()) ? `${name} by ${brand}` : name);
+  const title = `${base} — ${site.name}`;
+  const source = (form.seoDescription.trim() || form.description.trim() || form.subtitle.trim()).replace(/\s+/g, " ");
+  const description = source.length > SEO_DESCRIPTION_SHOWN ? `${source.slice(0, SEO_DESCRIPTION_SHOWN - 1).trimEnd()}…` : source;
+  const shownTitle = title.length > SEO_TITLE_SHOWN ? `${title.slice(0, SEO_TITLE_SHOWN - 1).trimEnd()}…` : title;
+  return (
+    <div className="border border-adm-line bg-white p-3">
+      <p className="mb-1.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-adm-mute uppercase">Search result preview</p>
+      <p className="text-[12px] text-[#202124]">dockonesolutions.com › product › {form.id ?? "…"}</p>
+      <p className="text-[18px] leading-6 text-[#1a0dab]">{shownTitle}</p>
+      <p className="text-[13px] leading-5 text-[#4d5156]">{description || <span className="italic">No description yet — Google picks text from the page.</span>}</p>
+      <p className="mt-2 text-[11px] leading-4 text-adm-mute">
+        Title {title.length}/{SEO_TITLE_SHOWN} characters shown{title.length > SEO_TITLE_SHOWN ? " — shorten it so the end isn't cut" : ""} · description{" "}
+        {source.length}/{SEO_DESCRIPTION_SHOWN}
+        {source.length > SEO_DESCRIPTION_SHOWN ? " — the rest is cut" : source.length < 70 ? " — aim for 120 to 155" : ""}
+      </p>
+    </div>
   );
 }

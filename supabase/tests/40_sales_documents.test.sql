@@ -115,9 +115,12 @@ SELECT set_config('t.q1', (public.admin_save_document('{"bill_to_name":"BigCo"}'
   '{"sale_type":"cash"}', '{"doc_type":"quotation","bill_to_company":"BigCo (Pvt) Ltd"}') #>> '{invoice,id}'), false);
 SELECT pg_temp.eq((SELECT format('%s|%s|%s|%s|%s', doc_type, sale_type IS NULL, deduct_stock, total, balance_due) FROM pg_temp.inv('t.q1')),
                   'quotation|t|f|725000.00|0.00', 'a quotation allows custom lines, takes no stock and owes nothing');
-SELECT pg_temp.eq((SELECT notes[1] FROM pg_temp.inv('t.q1')), 'This quotation is valid until the date shown above.', 'with the quotation terms');
+-- The terms and validity are the settings' (40 seeds them; 56 replaces them with the client's).
+SELECT pg_temp.ok((SELECT notes FROM pg_temp.inv('t.q1')) = (SELECT quote_notes FROM public.invoice_settings) AND cardinality((SELECT notes FROM pg_temp.inv('t.q1'))) > 0,
+                  'with the quotation terms');
 SELECT public.admin_issue_invoice(current_setting('t.q1')::int);
-SELECT pg_temp.eq((SELECT format('%s|%s', number, valid_until - issue_date) FROM pg_temp.inv('t.q1')), 'QT-0001|14', 'its own numbering; valid 14 days');
+SELECT pg_temp.eq((SELECT format('%s|%s', number, valid_until - issue_date) FROM pg_temp.inv('t.q1')),
+                  format('QT-0001|%s', (SELECT quote_valid_days FROM public.invoice_settings)), 'its own numbering; valid for the set number of days');
 SELECT pg_temp.eq((SELECT stock_level FROM public.inventory WHERE variant_id = current_setting('t.vlt')::int), 9, 'no stock moved for the quotation');
 SELECT pg_temp.eq((SELECT (public.admin_invoice_summary() ->> 'issued_30d_count')::int), 2, 'quotations are not counted as invoices');
 SELECT pg_temp.throws(format($$SELECT public.admin_save_document('{"id":%s}', NULL, NULL, '{"doc_type":"invoice"}')$$, current_setting('t.q1')), '22023',
@@ -149,7 +152,7 @@ SELECT pg_temp.throws(format('SELECT public.admin_convert_quotation(%s)', curren
 SELECT set_config('t.q3', (public.admin_save_document('{"bill_to_name":"Switcher"}', jsonb_build_array(pg_temp.line('t.vms', 1, 5000)), NULL,
   '{"doc_type":"quotation"}') #>> '{invoice,id}'), false);
 SELECT public.admin_save_document(jsonb_build_object('id', current_setting('t.q3')::int), NULL, '{"sale_type":"cash"}', '{"doc_type":"invoice"}');
-SELECT pg_temp.eq((SELECT format('%s|%s', doc_type, notes[1] <> 'This quotation is valid until the date shown above.') FROM pg_temp.inv('t.q3')), 'invoice|t',
+SELECT pg_temp.eq((SELECT format('%s|%s', doc_type, notes = s.default_notes AND notes IS DISTINCT FROM s.quote_notes) FROM pg_temp.inv('t.q3'), public.invoice_settings s), 'invoice|t',
                   'a draft quotation becomes an invoice draft (with the invoice terms)');
 
 -- ── 4. website sales ────────────────────────────────────────────────────────

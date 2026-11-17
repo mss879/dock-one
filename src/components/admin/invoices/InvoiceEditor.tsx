@@ -8,6 +8,7 @@ import {
   FileCheck2,
   FileOutput,
   Link2,
+  MessageCircle,
   Printer,
   RotateCcw,
   Save,
@@ -24,6 +25,7 @@ import {
   DateTime,
   Field,
   Input,
+  MoneyInput,
   NumberInput,
   QueryError,
   SectionCard,
@@ -52,6 +54,7 @@ import {
   fetchInvoicesForOrder,
   fetchInvoiceSettings,
   fetchOrderPrefill,
+  fetchStaffNames,
   fetchUnitsForProducts,
   fetchVariantFacts,
   formatInvoiceNumber,
@@ -90,6 +93,7 @@ import { adminRpc } from "@/lib/admin/write";
 import { bankAccountFromSettings, normalizeStoreSettings } from "@/lib/settings-shared";
 import { ClientPicker } from "./ClientPicker";
 import { INVOICE_LOGO_PATH, invoiceDocumentTitle, printInvoice, renderInvoiceHtml } from "./invoice-document";
+import { WhatsappSendDialog } from "./WhatsappSendDialog";
 import { InvoicePreview } from "./InvoicePreview";
 import { LineItems } from "./LineItems";
 import { PaymentsPanel } from "./PaymentsPanel";
@@ -128,11 +132,11 @@ let saleRpcMissing = false;
 /** Set once admin_save_document turns out to be missing (40 not applied): 28 / 26 saves from then on. */
 let docRpcMissing = false;
 
-async function saveInvoiceRpc(form: InvoiceForm) {
+async function saveInvoiceRpc(form: InvoiceForm, owner = false) {
   const args = buildInvoiceSave(form);
   const sale = buildSaleTerms(form);
   if (!docRpcMissing) {
-    const result = await adminRpc<InvoiceRpcResult>("admin_save_document", { ...args, p_sale: sale, p_doc: buildDocSave(form) }, { ...INVOICE_WRITE, migration: DOCS_MIGRATION });
+    const result = await adminRpc<InvoiceRpcResult>("admin_save_document", { ...args, p_sale: sale, p_doc: buildDocSave(form, { owner }) }, { ...INVOICE_WRITE, migration: DOCS_MIGRATION });
     if (result.ok || result.kind !== "missing_migration") return result;
     docRpcMissing = true;
     if (form.docType === "quotation") return result;
@@ -165,6 +169,8 @@ function mergeSaved(current: InvoiceForm, saved: InvoiceForm): InvoiceForm {
     voidReason: saved.voidReason,
     createdAt: saved.createdAt,
     updatedAt: saved.updatedAt,
+    createdBy: saved.createdBy,
+    extrasSupported: saved.extrasSupported,
   };
 }
 
@@ -257,6 +263,7 @@ export function InvoiceEditor({
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [dialog, setDialog] = useState<null | "issue" | "revert" | "void" | "delete" | "convert">(null);
   const [voidReason, setVoidReason] = useState("");
@@ -329,6 +336,11 @@ export function InvoiceEditor({
     migration: "23_admin_catalogue.sql",
   });
 
+  // Who a sale can count for (53): the owner and the staff accounts.
+  const staffNames = useAdminQuery(({ supabase, signal }) => fetchStaffNames(supabase, signal), ["admin-staff-names"], {
+    enabled: Boolean(form?.extrasSupported) && form?.docType === "invoice",
+  });
+
   // The serial-number register for the products on the invoice (hints and in-stock suggestions).
   const productIds = form ? [...new Set(form.lines.map((l) => l.productId).filter((id): id is number => id != null))].sort((a, b) => a - b) : [];
   const unitsQuery = useAdminQuery(({ supabase, signal }) => fetchUnitsForProducts(supabase, productIds, signal), ["invoice-units", productIds], {
@@ -398,7 +410,7 @@ export function InvoiceEditor({
     }
     const run = (async () => {
       setSaveState({ kind: "saving" });
-      const result = await saveInvoiceRpc(current);
+      const result = await saveInvoiceRpc(current, access.isAdmin);
       if (!result.ok) {
         const conflict = result.message.includes("changed somewhere else");
         setSaveState({ kind: "error", message: result.message, conflict });
@@ -524,7 +536,7 @@ export function InvoiceEditor({
     if (!form || duplicating) return;
     setDuplicating(true);
     const copy = duplicateForm(form, settings, today);
-    const result = await saveInvoiceRpc(copy);
+    const result = await saveInvoiceRpc(copy, access.isAdmin);
     setDuplicating(false);
     if (!result.ok) {
       adminToast.error("Couldn't duplicate the invoice", result.message);
@@ -642,7 +654,11 @@ export function InvoiceEditor({
   const due = form.docType === "quotation" ? "" : dueHint(form.dueDate, totals?.balanceDue ?? 0, form.status, today);
   const draft = form.status === "draft";
   const issued = form.status === "issued";
-  const isVoid = form.status === "void";
+  const voided = form.status === "void";
+  // 53: a finalised invoice marked paid is final for staff — only the owner changes it (the
+  // database refuses staff changes too; this keeps the screen honest).
+  const paidLocked = form.docType === "invoice" && form.status === "issued" && form.paymentStatus === "paid" && !access.isAdmin;
+  const isVoid = voided || paidLocked;
   const locked = !draft;
   const credit = form.saleType === "credit";
   const saleHint = SALE_TYPES.find((t) => t.value === form.saleType)?.hint;
@@ -767,6 +783,11 @@ export function InvoiceEditor({
             <AdminButton size="sm" icon={<Printer aria-hidden className="size-3.5" />} onClick={() => void print()} title="Print or save as PDF (⌘/Ctrl+P)">
               Print / PDF
             </AdminButton>
+            {!quote && issued && form.id != null && form.number != null && (
+              <AdminButton size="sm" icon={<MessageCircle aria-hidden className="size-3.5" />} onClick={() => setWhatsappOpen(true)} title="Send the invoice PDF to the customer on WhatsApp">
+                WhatsApp
+              </AdminButton>
+            )}
             {draft && form.id != null && form.number == null && access.isAdmin && (
               <AdminButton size="sm" variant="ghost" icon={<Trash2 aria-hidden className="size-3.5" />} onClick={() => setDialog("delete")}>
                 <span className="hidden 2xl:inline">Delete</span>
@@ -830,7 +851,12 @@ export function InvoiceEditor({
           </button>
         </AdminNotice>
       )}
-      {isVoid && (
+      {paidLocked && (
+        <AdminNotice tone="info" title={`${form.number ?? "This invoice"} is paid — it's final`} className="mb-4">
+          Paid invoices can only be changed by the owner. You can still print it or send it on WhatsApp.
+        </AdminNotice>
+      )}
+      {voided && (
         <AdminNotice tone="info" title={`${form.number ?? `This ${noun}`} is void`} className="mb-4">
           {form.voidReason ? `Reason: ${form.voidReason}. ` : ""}It stays on record with its number and can still be printed (marked VOID). Duplicate it to bill again.
         </AdminNotice>
@@ -972,6 +998,37 @@ export function InvoiceEditor({
                   <Input type="date" value={form.dueDate ?? ""} min={form.issueDate} disabled={isVoid || credit} onChange={(e) => update({ dueDate: e.target.value || null })} />
                 </Field>
               )}
+              {!quote && form.extrasSupported && (() => {
+                // 53: who the sale counts for (staff commission) and an internal bonus — the owner's to set.
+                const names = staffNames.data ?? [];
+                const nameOf = (id: string | null) => (id ? (names.find((n) => n.userId === id)?.name ?? "A staff account") : null);
+                const creator = nameOf(form.createdBy);
+                return (
+                  <>
+                    <Field
+                      label="Sales staff"
+                      hint={access.isAdmin ? "Who this sale counts for in staff commission. “Whoever made it” = the account that created the invoice." : "Set by the owner."}
+                    >
+                      {access.isAdmin ? (
+                        <Select
+                          value={form.salesStaffId ?? ""}
+                          disabled={isVoid}
+                          options={[
+                            { value: "", label: creator ? `Whoever made it (${creator})` : "Whoever made it" },
+                            ...names.filter((n) => n.isActive || n.userId === form.salesStaffId).map((n) => ({ value: n.userId, label: `${n.name}${n.role === "owner" ? " (owner)" : ""}` })),
+                          ]}
+                          onChange={(e) => update({ salesStaffId: e.target.value || null })}
+                        />
+                      ) : (
+                        <Input readOnly value={nameOf(form.salesStaffId) ?? creator ?? "Whoever made it"} />
+                      )}
+                    </Field>
+                    <Field label="BONUS (internal)" optional hint="Never printed. Added to the sales staff's commission total (Reports → Staff commission).">
+                      <MoneyInput value={form.bonus} allowCents max={100_000_000} disabled={isVoid || !access.isAdmin} onChange={(bonus) => update({ bonus })} />
+                    </Field>
+                  </>
+                );
+              })()}
               {!isVoid && !credit && !quote && (
                 <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
                   <span className="mr-1 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-adm-mute uppercase">Due</span>
@@ -1010,7 +1067,9 @@ export function InvoiceEditor({
                 ? "Search or scan to add from the inventory, or add a custom line for anything not in stock."
                 : "Search or scan to add from the inventory — invoices take inventory products only."
               : isVoid
-                ? "A void invoice can't change."
+                ? paidLocked
+                  ? "A paid invoice is final — only the owner can change it."
+                  : "A void invoice can't change."
                 : "Quantities and prices are fixed now — descriptions, warranty and serial numbers can still be corrected.",
             <>
               <LineItems
@@ -1193,6 +1252,15 @@ export function InvoiceEditor({
                 disabled={isVoid || (!bank && !form.showBankDetails)}
                 onChange={(showBankDetails) => update({ showBankDetails })}
               />
+              {form.extrasSupported && (
+                <Toggle
+                  label="Print signature lines"
+                  description="Two dotted lines at the foot: “Received in Good Order & Condition” and “Authorised Signature”."
+                  checked={form.showSignatureLines}
+                  disabled={isVoid}
+                  onChange={(showSignatureLines) => update({ showSignatureLines })}
+                />
+              )}
               <Field
                 label="Notes"
                 error={fieldError("notes")}
@@ -1335,6 +1403,16 @@ export function InvoiceEditor({
           ))}
         </ol>
       </ConfirmDialog>
+
+      {!quote && issued && form.id != null && form.number != null && (
+        <WhatsappSendDialog
+          open={whatsappOpen}
+          onClose={() => setWhatsappOpen(false)}
+          invoiceId={form.id}
+          document={{ form, settings: effectiveSettings, bank, logoUrl, paidOn: lastPaidOn }}
+          canSend={access.can("invoices", "edit") || access.can("whatsapp", "edit")}
+        />
+      )}
 
       <TemplateSettings
         open={templateOpen}

@@ -90,8 +90,8 @@ SELECT pg_temp.eq((SELECT min(p.price)::int FROM public.products p
                   '"Creator power from Rs. 724,900" = the Forge Studio 16 price');
 
 -- ── 4. content blocks ────────────────────────────────────────────────────────
-SELECT pg_temp.eq((SELECT string_agg(key, ',' ORDER BY key) FROM public.content_blocks),
-                  'hero_perks,new_arrivals_feature,order_your_way,store_status,trust_row', 'five blocks, and NO testimonial');
+SELECT pg_temp.eq((SELECT string_agg(key, ',' ORDER BY key) FROM public.content_blocks WHERE key <> 'it_solutions'),
+                  'hero_perks,new_arrivals_feature,order_your_way,store_status,trust_row', 'five blocks, and NO testimonial (52 adds it_solutions)');
 SELECT pg_temp.eq((SELECT jsonb_path_query_array(data, '$.items[*].title') FROM public.content_blocks WHERE key = 'hero_perks'),
                   '["Free delivery", "Secure payment", "Easy returns"]'::jsonb, 'hero perks');
 SELECT pg_temp.eq((SELECT data #>> '{items,0,text}' FROM public.content_blocks WHERE key = 'hero_perks'), 'Orders over {free_delivery_threshold}',
@@ -133,7 +133,7 @@ SELECT pg_temp.eq((
 -- ── 6. idempotent, and never overwrites the owner ───────────────────────────
 \ir ../migrations/31_seed_storefront.sql
 SELECT pg_temp.eq((SELECT count(*) FROM public.hero_slides), 3::bigint, 'a second run adds no slides');
-SELECT pg_temp.eq((SELECT count(*) FROM public.content_blocks), 5::bigint, 'a second run adds no blocks');
+SELECT pg_temp.eq((SELECT count(*) FROM public.content_blocks WHERE key <> 'it_solutions'), 5::bigint, 'a second run adds no blocks');
 
 -- With the marker gone (a deliberate re-seed), the owner's values still win.
 DELETE FROM public.app_config WHERE name = 'seed_31_storefront_demo';

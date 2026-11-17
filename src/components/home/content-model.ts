@@ -495,6 +495,22 @@ export const testimonialSchema = z.object({
 
 export const newArrivalsFeatureSchema = z.object({ product: productSlug, title: requiredText(60), kicker: optionalText(60) });
 
+const siteLink = z.string().trim().max(500, tooLong(500)).refine((value) => LINK_PATTERN.test(value), { error: "a page on this site (/shop?category=laptops) or an https:// address" });
+
+/**
+ * "IT solutions" (52_homepage_it_solutions): what the store does for businesses — a heading, a
+ * short paragraph, up to six items (each linking to a category or page) and one button.
+ */
+export const itSolutionsSchema = z.object({
+  eyebrow: optionalText(40),
+  title: requiredText(80),
+  body: optionalText(400),
+  items: z
+    .array(z.object({ title: requiredText(60), text: optionalText(160), href: siteLink.optional().or(z.literal("")) }))
+    .max(6, { error: "at most 6 items" }),
+  cta: z.object({ label: requiredText(40), href: siteLink }).optional(),
+});
+
 export const CONTENT_BLOCK_SCHEMAS = {
   hero_perks: heroPerksSchema,
   trust_row: trustRowSchema,
@@ -502,6 +518,7 @@ export const CONTENT_BLOCK_SCHEMAS = {
   store_status: storeStatusSchema,
   testimonial: testimonialSchema,
   new_arrivals_feature: newArrivalsFeatureSchema,
+  it_solutions: itSolutionsSchema,
 } as const;
 
 export type ContentBlockKey = keyof typeof CONTENT_BLOCK_SCHEMAS;
@@ -513,6 +530,7 @@ export type OrderYourWayBlock = ContentBlockData<"order_your_way">;
 export type StoreStatusBlock = ContentBlockData<"store_status">;
 export type TestimonialBlock = ContentBlockData<"testimonial">;
 export type NewArrivalsFeatureBlock = ContentBlockData<"new_arrivals_feature">;
+export type ITSolutionsBlock = ContentBlockData<"it_solutions">;
 
 export type BlockParse<K extends ContentBlockKey> = { ok: true; data: ContentBlockData<K> } | { ok: false; issues: string[] };
 

@@ -2,7 +2,8 @@ import { absoluteUrl } from "@/lib/env";
 import { productHref, type ProductDetail } from "@/lib/catalogue-shared";
 import { BASE_CURRENCY } from "@/lib/currency-shared";
 
-export type JsonLdAvailability = "InStock" | "OutOfStock" | null;
+/** schema.org ItemAvailability: PreOrder / BackOrder for "Pre-order" / "Available to order" options (50). */
+export type JsonLdAvailability = "InStock" | "OutOfStock" | "PreOrder" | "BackOrder" | null;
 
 /** Site-relative paths ("/images/…") become absolute; storage URLs are already absolute. */
 function absoluteImage(url: string): string {

@@ -14,7 +14,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
-import { findCategory, getCatalogueFacets, SEARCH_RANK_CAP, type Category } from "@/lib/catalogue";
+import { findCategory, getCatalogueFacets, getCategorySpecs, SEARCH_RANK_CAP, type Category } from "@/lib/catalogue";
+import { buildSpecFacets, specSelectionCount } from "@/lib/spec-filters";
 import { hasRefinements, parseShopQuery, SHOP_PATH, shopHref, shopSearchParams, type RawSearchParams, type ShopQuery } from "@/lib/catalogue-queries";
 import { getStoreSettings } from "@/lib/settings";
 import { loadShopResults } from "./shop-results";
@@ -81,17 +82,20 @@ export default async function ShopPage({ searchParams }: Props) {
   if (!resolved) notFound();
   const { query, category } = resolved;
 
-  const [globalFacets, scopedFacets, settings, results] = await Promise.all([
+  const [globalFacets, scopedFacets, settings, results, categorySpecs] = await Promise.all([
     getCatalogueFacets(),
     getCatalogueFacets({ categoryId: query.category }),
     getStoreSettings(),
     loadShopResults(query),
+    query.category ? getCategorySpecs(query.category) : Promise.resolve([]),
   ]);
+  // RAM / SSD / graphics … for laptops, capacity for drives, refresh rate for monitors.
+  const specFacets = buildSpecFacets(query.category, categorySpecs, query.specs);
 
   const pageCount = Math.max(1, Math.ceil(results.total / results.pageSize));
   const pastEnd = results.total > 0 && results.items.length === 0 && query.page > pageCount;
   const refinements = hasRefinements(query);
-  const activeCount = query.brands.length + (query.min !== null || query.max !== null ? 1 : 0) + (query.inStock ? 1 : 0);
+  const activeCount = query.brands.length + (query.min !== null || query.max !== null ? 1 : 0) + (query.inStock ? 1 : 0) + specSelectionCount(query.specs);
   const showCounts = !query.q && !query.filter && !refinements;
 
   const contextLabel = query.q ? "Search" : query.filter ? (query.filter === "deals" ? (settings.flashSaleTitle ?? TITLES.deals) : TITLES.new) : null;
@@ -164,7 +168,7 @@ export default async function ShopPage({ searchParams }: Props) {
             </nav>
             <div className="mt-8 border-t border-ink pt-4">
               <p className="label mb-4 font-semibold">/02 Filter</p>
-              <ShopFilters key={shopHref(query)} query={query} brands={scopedFacets.brands} priceRange={scopedFacets.price} />
+              <ShopFilters key={shopHref(query)} query={query} brands={scopedFacets.brands} priceRange={scopedFacets.price} specFacets={specFacets} />
             </div>
           </FilterPanel>
         </aside>

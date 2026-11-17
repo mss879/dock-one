@@ -33,6 +33,7 @@ type Draft = {
   defaultTaxRate: number | null;
   defaultDeductStock: boolean;
   defaultShowBankDetails: boolean;
+  defaultShowSignatureLines: boolean;
   closingTitle: string;
   closingLine: string;
   footerTagline: string;
@@ -53,6 +54,7 @@ function toDraft(s: InvoiceSettings): Draft {
     defaultTaxRate: s.defaultTaxRate,
     defaultDeductStock: s.defaultDeductStock,
     defaultShowBankDetails: s.defaultShowBankDetails,
+    defaultShowSignatureLines: s.defaultShowSignatureLines,
     closingTitle: s.closingTitle,
     closingLine: s.closingLine,
     footerTagline: s.footerTagline,
@@ -82,6 +84,7 @@ function patchOf(draft: Draft, saved: InvoiceSettings): Record<string, unknown> 
   set(draft.defaultTaxRate !== before.defaultTaxRate, "default_tax_rate", draft.defaultTaxRate ?? 0);
   set(draft.defaultDeductStock !== before.defaultDeductStock, "default_deduct_stock", draft.defaultDeductStock);
   set(draft.defaultShowBankDetails !== before.defaultShowBankDetails, "default_show_bank_details", draft.defaultShowBankDetails);
+  set(draft.defaultShowSignatureLines !== before.defaultShowSignatureLines, "default_show_signature_lines", draft.defaultShowSignatureLines);
   set(draft.closingTitle.trim() !== before.closingTitle, "closing_title", blankToNull(draft.closingTitle));
   set(draft.closingLine.trim() !== before.closingLine, "closing_line", blankToNull(draft.closingLine));
   set(draft.footerTagline.trim() !== before.footerTagline, "footer_tagline", blankToNull(draft.footerTagline));
@@ -263,6 +266,14 @@ export function TemplateSettings({
                 checked={draft.defaultShowBankDetails}
                 onChange={(on) => set({ defaultShowBankDetails: on })}
               />
+              {source?.signatureSupported && (
+                <Toggle
+                  label="Print signature lines on new documents"
+                  description="“Received in Good Order & Condition” and “Authorised Signature” under two dotted lines. Each invoice or quotation can still switch them on or off."
+                  checked={draft.defaultShowSignatureLines}
+                  onChange={(on) => set({ defaultShowSignatureLines: on })}
+                />
+              )}
             </div>
           </SectionCard>
 

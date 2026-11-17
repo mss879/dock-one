@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { site } from "@/data/site";
 import { BestSellers } from "@/components/home/BestSellers";
+import { CategoryPicks, type CategoryPickGroup } from "@/components/home/CategoryPicks";
 import { CategoryPopouts } from "@/components/home/CategoryPopouts";
 import { Collections } from "@/components/home/Collections";
 import { FlashDeals } from "@/components/home/FlashDeals";
 import { Hero } from "@/components/home/Hero";
+import { InstagramFeed } from "@/components/home/InstagramFeed";
+import { ITSolutions } from "@/components/home/ITSolutions";
 import { NewArrivals, type NewArrivalsFeature } from "@/components/home/NewArrivals";
 import { OrderYourWay } from "@/components/home/OrderYourWay";
 import { PromoGrid } from "@/components/home/PromoGrid";
@@ -12,7 +15,7 @@ import { SignalSection, type Testimonial } from "@/components/home/SignalSection
 import { TrustRow } from "@/components/home/TrustRow";
 import { telHref, whatsappHref } from "@/components/layout/contact";
 import { Ticker } from "@/components/layout/Ticker";
-import { getCategories, listProducts, type ProductArt, type ProductDetail } from "@/lib/catalogue";
+import { categoryHref, getCategories, listProducts, type Category, type ProductArt, type ProductDetail } from "@/lib/catalogue";
 import {
   contentContext,
   getBestSellers,
@@ -26,6 +29,7 @@ import {
   sectionIndex,
   toProductCard,
 } from "@/lib/content";
+import { getInstagramFeed } from "@/lib/instagram";
 import { getStoreSettings } from "@/lib/settings";
 
 /*
@@ -44,6 +48,15 @@ function isFuture(iso: string | null): iso is string {
   return Number.isFinite(time) && time > Date.now();
 }
 
+/** "Top picks by category": each active category's first four products in its featured order. */
+async function categoryPickGroups(categories: Category[]): Promise<CategoryPickGroup[]> {
+  const withProducts = categories.filter((category) => (category.productCount ?? 1) > 0).slice(0, 14);
+  const lists = await Promise.all(withProducts.map((category) => listProducts({ categoryId: category.id, sort: "featured", pageSize: 4 })));
+  return withProducts
+    .map((category, i) => ({ id: category.id, name: category.name, href: categoryHref(category.id), products: lists[i].items }))
+    .filter((group) => group.products.length > 0);
+}
+
 function artOf(product: ProductDetail | null): ProductArt | null {
   return product ? { id: product.id, slug: product.slug, name: product.name, categoryId: product.categoryId, imageUrl: product.imageUrl, cutoutUrl: product.cutoutUrl } : null;
 }
@@ -53,7 +66,7 @@ export default async function Home() {
   const ctx = contentContext(settings);
   const flashEndsAt = isFuture(settings.flashSaleEndsAt) ? settings.flashSaleEndsAt : null;
 
-  const [slides, perks, categories, tiles, collections, flash, newest, featureBlock, bestSellers, trust, ways, status, testimonialBlock, review, rating] =
+  const [slides, perks, categories, tiles, collections, flash, newest, featureBlock, bestSellers, trust, ways, status, testimonialBlock, review, rating, itBlock] =
     await Promise.all([
       getHeroSlides(),
       getContentBlock("hero_perks"),
@@ -70,7 +83,10 @@ export default async function Home() {
       getContentBlock("testimonial"),
       getFeaturedReview(),
       getReviewSummary(),
+      getContentBlock("it_solutions"),
     ]);
+  const instagram = await getInstagramFeed();
+  const pickGroups = await categoryPickGroups(categories);
 
   // Products named by blocks resolve on the server (P4): a hidden or deleted one simply drops out.
   const [featureProduct, artTop, artBottom] = await Promise.all([
@@ -99,8 +115,11 @@ export default async function Home() {
     collections: next(collections.length > 0),
     flash: next(Boolean(flashEndsAt) && flashDeals.length > 0),
     newArrivals: next(Boolean(feature) || newArrivals.length > 0),
+    picks: next(pickGroups.length > 0),
     bestSellers: next(bestSellers.length > 0),
+    itSolutions: next(Boolean(itBlock)),
     orderYourWay: next(Boolean(ways)),
+    instagram: next(Boolean(instagram)),
     testimonial: next(Boolean(testimonial)),
     status: next(hasStatus),
     newsletter: next(true),
@@ -108,7 +127,7 @@ export default async function Home() {
 
   return (
     <main id="main" className="pb-24">
-      <h1 className="sr-only">{site.name} — laptops, storage devices, keyboards and mice in Sri Lanka</h1>
+      <h1 className="sr-only">{site.name} — laptops, monitors, storage, networking, accessories and IT solutions in Sri Lanka</h1>
       <div className="shell pt-4 lg:pt-6">
         <Hero slides={slides} perks={perks?.items ?? []} ctx={ctx} />
       </div>
@@ -121,8 +140,10 @@ export default async function Home() {
         <Collections collections={collections} index={index.collections} />
         {flashEndsAt && <FlashDeals products={flashDeals} title={settings.flashSaleTitle ?? "Flash deals"} endsAt={flashEndsAt} index={index.flash} />}
         <NewArrivals feature={feature} products={newArrivals} index={index.newArrivals} />
+        <CategoryPicks groups={pickGroups} index={index.picks} />
         <BestSellers products={bestSellers} index={index.bestSellers} />
         {trust && <TrustRow items={trust.items} ctx={ctx} />}
+        {itBlock && <ITSolutions block={itBlock} index={index.itSolutions} whatsappHref={whatsappHref(settings.whatsapp)} />}
         {ways && (
           <OrderYourWay
             block={ways}
@@ -135,6 +156,7 @@ export default async function Home() {
             index={index.orderYourWay}
           />
         )}
+        {instagram && <InstagramFeed feed={instagram} index={index.instagram} profileUrl={settings.socials.instagram ?? null} />}
         <SignalSection
           testimonial={testimonial}
           rating={rating}

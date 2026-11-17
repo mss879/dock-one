@@ -10,6 +10,7 @@ import {
   TRUST_ICONS,
   type ContentContext,
   type HeroPerks,
+  type ITSolutionsBlock,
   type ListIcon,
   type OrderYourWayBlock,
   type StoreStatusBlock,
@@ -334,9 +335,90 @@ function TestimonialEditor() {
   );
 }
 
+// ── IT solutions ─────────────────────────────────────────────────────────────
+
+function ITSolutionsEditor() {
+  const editor = useBlockEditor("it_solutions");
+  const draft = editor.draft;
+  const setItem = (index: number, patch: Partial<ITSolutionsBlock["items"][number]>) =>
+    draft && editor.setDraft({ ...draft, items: draft.items.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
+  return (
+    <BlockFrame
+      editor={editor}
+      title="IT solutions"
+      description="The dark “For businesses” section on the homepage: what you do for companies, with up to six items linking to categories or pages, and one button."
+      empty="No IT solutions section — it is hidden on the homepage."
+      emptyDraft={(): ITSolutionsBlock => ({ eyebrow: "For businesses", title: "IT solutions for your business", body: "", items: [], cta: { label: "Talk to us", href: "/contact" } })}
+      removeNote="The IT solutions section disappears from the homepage."
+    >
+      {draft && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
+            <Field label="Small heading" optional hint="Above the title, e.g. “For businesses”.">
+              <Input value={draft.eyebrow} maxLength={40} onChange={(event) => editor.setDraft({ ...draft, eyebrow: event.target.value })} />
+            </Field>
+            <Field label="Title" required>
+              <Input value={draft.title} maxLength={80} onChange={(event) => editor.setDraft({ ...draft, title: event.target.value })} />
+            </Field>
+          </div>
+          <Field label="Text" optional hint="Up to 400 characters.">
+            <Textarea rows={3} value={draft.body} maxLength={400} onChange={(event) => editor.setDraft({ ...draft, body: event.target.value })} />
+          </Field>
+          <ol className="grid gap-3">
+            {draft.items.map((item, index) => (
+              <li key={index} className="grid gap-3 border border-adm-line bg-adm-panel-2 p-3 sm:grid-cols-[1fr_2fr_1.4fr_auto]">
+                <Field label={`Item ${index + 1}`} required>
+                  <Input value={item.title} maxLength={60} onChange={(event) => setItem(index, { title: event.target.value })} />
+                </Field>
+                <Field label="Line" optional>
+                  <Input value={item.text} maxLength={160} onChange={(event) => setItem(index, { text: event.target.value })} />
+                </Field>
+                <Field label="Links to" optional hint="/shop?category=laptops">
+                  <Input value={item.href ?? ""} maxLength={500} onChange={(event) => setItem(index, { href: event.target.value })} />
+                </Field>
+                <span className="flex items-end gap-0.5 pb-0.5">
+                  <IconButton size="sm" label={`Move item ${index + 1} up`} icon={<ArrowUp className="size-3.5" />} disabled={index === 0}
+                    onClick={() => editor.setDraft({ ...draft, items: draft.items.map((x, i) => (i === index - 1 ? draft.items[index] : i === index ? draft.items[index - 1] : x)) })} />
+                  <IconButton size="sm" label={`Move item ${index + 1} down`} icon={<ArrowDown className="size-3.5" />} disabled={index === draft.items.length - 1}
+                    onClick={() => editor.setDraft({ ...draft, items: draft.items.map((x, i) => (i === index + 1 ? draft.items[index] : i === index ? draft.items[index + 1] : x)) })} />
+                  <IconButton size="sm" label={`Remove item ${index + 1}`} icon={<Trash2 className="size-3.5" />}
+                    onClick={() => editor.setDraft({ ...draft, items: draft.items.filter((_, i) => i !== index) })} />
+                </span>
+              </li>
+            ))}
+          </ol>
+          <AdminButton size="sm" icon={<Plus aria-hidden className="size-3.5" />} disabled={draft.items.length >= 6}
+            onClick={() => editor.setDraft({ ...draft, items: [...draft.items, { title: "", text: "", href: "" }] })}>
+            Add item
+          </AdminButton>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Button text" optional hint="Leave empty for no button.">
+              <Input
+                value={draft.cta?.label ?? ""}
+                maxLength={40}
+                onChange={(event) =>
+                  editor.setDraft({ ...draft, cta: event.target.value ? { label: event.target.value, href: draft.cta?.href || "/contact" } : undefined })
+                }
+              />
+            </Field>
+            <Field label="Button links to" optional hint="/contact, /quote or https://…">
+              <Input
+                value={draft.cta?.href ?? ""}
+                maxLength={500}
+                onChange={(event) => editor.setDraft({ ...draft, cta: { label: draft.cta?.label ?? "", href: event.target.value } })}
+              />
+            </Field>
+          </div>
+          <InfoLine>Only list services the business really offers. The section also shows your WhatsApp button when a WhatsApp number is set in Store settings.</InfoLine>
+        </>
+      )}
+    </BlockFrame>
+  );
+}
+
 // ── The panel ────────────────────────────────────────────────────────────────
 
-type BlockTab = "perks" | "trust" | "ways" | "status" | "testimonial";
+type BlockTab = "perks" | "trust" | "ways" | "status" | "testimonial" | "it";
 
 export function ContentBlocksPanel({ ctx }: { ctx: ContentContext }) {
   const [tab, setTab] = useState<BlockTab>("perks");
@@ -351,6 +433,7 @@ export function ContentBlocksPanel({ ctx }: { ctx: ContentContext }) {
         { key: "ways", label: "Order your way" },
         { key: "status", label: "Store status" },
         { key: "testimonial", label: "Testimonial" },
+        { key: "it", label: "IT solutions" },
       ]}
     >
       {tab === "perks" && <HeroPerksEditor ctx={ctx} />}
@@ -358,6 +441,7 @@ export function ContentBlocksPanel({ ctx }: { ctx: ContentContext }) {
       {tab === "ways" && <OrderYourWayEditor ctx={ctx} />}
       {tab === "status" && <StoreStatusEditor />}
       {tab === "testimonial" && <TestimonialEditor />}
+      {tab === "it" && <ITSolutionsEditor />}
     </Tabs>
   );
 }

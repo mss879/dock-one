@@ -1,9 +1,20 @@
 "use client";
 
-import { Ban, Banknote, Link2, Printer } from "lucide-react";
+import { Ban, Banknote, Download, Link2, Printer } from "lucide-react";
 import { useState } from "react";
 import { useAdminAccess } from "@/components/admin/access";
-import { fetchReceiptPage, fetchReceiptsSummary, printReceipt, RECEIPTS_MIGRATION, receiptMethodText, type ReceiptFilter, type ReceiptRow } from "@/components/admin/receipts/receipts";
+import {
+  fetchReceiptPage,
+  fetchReceiptsForExport,
+  fetchReceiptsSummary,
+  printReceipt,
+  RECEIPT_EXPORT_MAX,
+  RECEIPTS_MIGRATION,
+  receiptMethodText,
+  receiptsXlsx,
+  type ReceiptFilter,
+  type ReceiptRow,
+} from "@/components/admin/receipts/receipts";
 import { getAdminTab } from "@/components/admin/registry";
 import {
   AdminButton,
@@ -23,7 +34,8 @@ import {
   Textarea,
   Toolbar,
 } from "@/components/admin/ui";
-import { rangeValue, todayYmd, type DateRangeValue } from "@/lib/admin/dates";
+import { formatRangeLabel, rangeValue, todayYmd, type DateRangeValue } from "@/lib/admin/dates";
+import { downloadXlsx } from "@/lib/admin/xlsx";
 import { fetchInvoiceSettings, formatInvoiceDate, formatRs, paymentMethodLabel, RECEIPT_METHODS, type ReceiptMethod } from "@/lib/admin/invoices";
 import { ADMIN_PAGE_SIZE, pageRange } from "@/lib/admin/pagination";
 import { useAdminQuery } from "@/lib/admin/query";
@@ -74,6 +86,7 @@ export default function ReceiptsTab() {
   const [voidReason, setVoidReason] = useState("");
   const [linking, setLinking] = useState<ReceiptRow | null>(null);
   const [linkNumber, setLinkNumber] = useState("");
+  const [exporting, setExporting] = useState(false);
   const { from, to } = pageRange(page);
   const today = todayYmd();
 
@@ -133,6 +146,27 @@ export default function ReceiptsTab() {
     refresh();
   };
 
+  /** Excel: every receipt matching the filters (not just this page), each with the invoice it pays. */
+  const exportExcel = async () => {
+    const supabase = getBrowserSupabase();
+    if (!supabase || exporting) return;
+    setExporting(true);
+    try {
+      const { rows, capped } = await fetchReceiptsForExport(supabase, { search, filter, method, bounds: { from: range.from, to: range.to } });
+      const filters = [
+        FILTERS.find((f) => f.value === filter)?.label ?? "All receipts",
+        method ? paymentMethodLabel(method) : "All methods",
+        ...(search.trim() ? [`matching “${search.trim()}”`] : []),
+      ].join(" · ");
+      downloadXlsx(`receipts-${range.from}_${range.to}`, [receiptsXlsx(rows, { period: formatRangeLabel(range), filters })]);
+      if (capped) adminToast.error("Export cut short", `Only the first ${RECEIPT_EXPORT_MAX.toLocaleString("en-LK")} receipts — choose a shorter period.`);
+    } catch (e) {
+      adminToast.error("Couldn't export the receipts", e instanceof Error ? e.message : undefined);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const s = summary.data;
   const filtered = search !== "" || filter !== "all" || method !== "";
   return (
@@ -142,18 +176,23 @@ export default function ReceiptsTab() {
         title={tab.label}
         description={tab.summary}
         actions={
-          canEdit ? (
-            <AdminButton
-              variant="primary"
-              icon={<Banknote aria-hidden className="size-3.5" />}
-              onClick={() => {
-                setError(null);
-                setDraft({ invoiceNumber: "", amount: null, paidOn: today, method: "cash", cardAccount: "", chequeNumber: "", payerName: "", reference: "", note: "" });
-              }}
-            >
-              Record payment
+          <>
+            <AdminButton icon={<Download aria-hidden className="size-3.5" />} loading={exporting} disabled={list.loading && !list.data} onClick={() => void exportExcel()}>
+              Excel
             </AdminButton>
-          ) : undefined
+            {canEdit && (
+              <AdminButton
+                variant="primary"
+                icon={<Banknote aria-hidden className="size-3.5" />}
+                onClick={() => {
+                  setError(null);
+                  setDraft({ invoiceNumber: "", amount: null, paidOn: today, method: "cash", cardAccount: "", chequeNumber: "", payerName: "", reference: "", note: "" });
+                }}
+              >
+                Record payment
+              </AdminButton>
+            )}
+          </>
         }
       />
       {(list.error ?? summary.error) && <QueryError error={(list.error ?? summary.error)!} onRetry={refresh} feature="Receipts" className="mb-4" />}
@@ -281,7 +320,7 @@ export default function ReceiptsTab() {
             },
           ]}
           actions={[
-            { label: "Print", icon: <Printer aria-hidden className="size-3.5" />, onClick: (r) => void printReceipt(r, settingsQuery.data ?? null) },
+            { label: "Print", icon: <Printer aria-hidden className="size-3.5" />, onClick: (r) => void printReceipt(r, settingsQuery.data ?? null, getBrowserSupabase()) },
             {
               label: "Link to invoice",
               icon: <Link2 aria-hidden className="size-3.5" />,

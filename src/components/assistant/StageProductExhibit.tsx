@@ -20,6 +20,8 @@ import { toast } from "@/lib/toast";
 
 function bandText(band: AssistantStockBand): string {
   if (band.state === "out") return "Out of stock";
+  if (band.state === "order") return band.wait ? `To order · ${band.wait}` : "Available to order";
+  if (band.state === "preorder") return band.wait ? `Pre-order · ${band.wait}` : "Pre-order";
   if (band.state === "low") return band.left ? `Only ${band.left} left` : "Low stock";
   return "In stock";
 }

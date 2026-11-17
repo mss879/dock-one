@@ -7,9 +7,11 @@ import { createServerSupabase } from "@/lib/supabase/server";
 
 /**
  * POST /api/presence { productId, sessionId } → { others } — how many OTHER browsers have this
- * product page open right now (42_storefront_extras · ping_product_view). The product page pings
- * every 30 s while visible. A random per-tab id only; nothing about the visitor is stored. Any
- * problem answers { others: 0 } — the note simply doesn't show.
+ * product page open right now (42_storefront_extras · ping_product_view, 45-second window since
+ * 51). The product page pings every 20 s while visible; { leave: true } (sent as a beacon when the
+ * page is hidden or closed) removes this browser at once (51 · leave_product_view). A random
+ * per-browser id only; nothing about the visitor is stored. Any problem answers { others: 0 } —
+ * the note simply doesn't show.
  */
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) return json({ others: 0 });
@@ -20,6 +22,11 @@ export async function POST(request: NextRequest) {
   if (productId == null || !isUuid(sessionId)) return json({ others: 0 });
   const supabase = createServerSupabase();
   if (!(await checkRateLimit(supabase, ipBucket("presence", request), 60, 600))) return json({ others: 0 });
+  if (parsed.body.leave === true) {
+    // before 51 the function doesn't exist: the row then just ages out of the window
+    await supabase.rpc("leave_product_view", { p_product_id: productId, p_session: sessionId });
+    return json({ others: 0 });
+  }
   const { data, error } = await supabase.rpc("ping_product_view", { p_product_id: productId, p_session: sessionId });
   if (error) return json({ others: 0 });
   const others = typeof data === "number" && Number.isFinite(data) ? Math.max(0, Math.min(99, data)) : 0;

@@ -13,6 +13,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AvailabilityMode } from "@/lib/availability";
+import { variantAvailabilityFromRow } from "@/lib/availability";
 import type { CacheTag } from "@/lib/cache-tags";
 import {
   safeImageUrl,
@@ -33,6 +35,7 @@ export const INVENTORY_MIGRATION = "05_inventory.sql";
 export const ADMIN_CATALOGUE_MIGRATION = "23_admin_catalogue.sql";
 /** The unit register: one serial number per physical unit (product editor stock intake). */
 export const SERIALS_MIGRATION = "25_serial_numbers.sql";
+export const AVAILABILITY_MIGRATION = "50_product_availability.sql";
 /** collections.show_in_nav: the navbar sale collection (11.11, Black Friday…), one at a time. */
 export const NAV_COLLECTION_MIGRATION = "45_navbar_collections.sql";
 export const COLLECTION_VARIANTS_MIGRATION = "46_collection_variants.sql";
@@ -480,20 +483,30 @@ export type SpecField =
 export const SPEC_TEMPLATES: Readonly<Record<string, readonly SpecField[]>> = {
   laptops: [
     { key: "cpu", label: "Processor (CPU)", kind: "text" },
-    { key: "gpu", label: "Graphics (GPU)", kind: "text" },
+    { key: "gpu", label: "Graphics (GPU)", kind: "text", hint: "e.g. NVIDIA GeForce RTX 4050 (6GB) or Intel UHD Graphics — used by the Graphics filter" },
     { key: "ram_gb", label: "Memory", kind: "number", unit: "GB" },
     { key: "storage_gb", label: "Storage", kind: "number", unit: "GB", hint: "Decimal: 1 TB = 1000" },
     { key: "storage_type", label: "Storage type", kind: "text", suggestions: ["NVMe SSD", "SATA SSD", "HDD"] },
-    { key: "display", label: "Display", kind: "text" },
+    { key: "display", label: "Display", kind: "text", hint: "e.g. 15.6-inch FHD IPS" },
+    { key: "screen_in", label: "Screen size", kind: "number", unit: "inch", decimals: true, hint: "e.g. 15.6 — used by the Screen size filter" },
+    { key: "touch", label: "Touchscreen", kind: "bool" },
     { key: "refresh_hz", label: "Refresh rate", kind: "number", unit: "Hz" },
     { key: "weight_kg", label: "Weight", kind: "number", unit: "kg", decimals: true },
     { key: "battery_wh", label: "Battery capacity", kind: "number", unit: "Wh", decimals: true },
     { key: "battery_h", label: "Battery life (rated)", kind: "number", unit: "hours", decimals: true },
-    { key: "os", label: "Operating system", kind: "text" },
+    { key: "os", label: "Operating system", kind: "text", suggestions: ["Windows 11 Home", "Windows 11 Pro", "macOS", "DOS", "ChromeOS"] },
     { key: "ports", label: "Ports", kind: "list", hint: "One port per entry, e.g. 2x Thunderbolt 4 (USB-C)" },
+    { key: "condition", label: "Condition", kind: "choice", options: ["New", "Open box", "Refurbished", "Used"] },
+  ],
+  monitors: [
+    { key: "screen_in", label: "Screen size", kind: "number", unit: "inch", decimals: true, hint: "e.g. 27 — used by the Screen size filter" },
+    { key: "display", label: "Display", kind: "text", hint: "e.g. 27-inch QHD IPS" },
+    { key: "refresh_hz", label: "Refresh rate", kind: "number", unit: "Hz", hint: "Used by the Refresh rate filter" },
+    { key: "panel", label: "Panel", kind: "text", suggestions: ["IPS", "VA", "TN", "OLED"] },
+    { key: "condition", label: "Condition", kind: "choice", options: ["New", "Open box", "Refurbished", "Used"] },
   ],
   storage: [
-    { key: "capacity_gb", label: "Capacity", kind: "number", unit: "GB", hint: "Decimal: 1 TB = 1000" },
+    { key: "capacity_gb", label: "Capacity", kind: "number", unit: "GB", hint: "Decimal: 1 TB = 1000 — used by the Capacity filter" },
     { key: "type", label: "Type", kind: "choice", options: ["Portable SSD", "External HDD", "Flash drive", "Desktop drive"] },
     { key: "interface", label: "Interface", kind: "text" },
     { key: "read_mbps", label: "Read speed", kind: "number", unit: "MB/s" },
@@ -598,6 +611,14 @@ export type VariantForm = {
   serials: string[];
   /** Serials of this variant's units already sold (read-only: they can't be back in stock). */
   soldSerials: string[];
+  /** How it is sold (50): stock / order / preorder / unavailable, with the wait shoppers see. */
+  availability: AvailabilityMode;
+  waitMin: number | null;
+  waitMax: number | null;
+  /** YYYY-MM-DD or "" — a pre-order's expected date. */
+  availableOn: string;
+  /** The four values above as loaded ("" for a new variant) — sent only when they change. */
+  availabilityLoaded: string;
   /** What the database had when the editor loaded (stock, cost and serials are sent only when changed). */
   loaded: { cost: number | null; track: boolean; stock: number | null; threshold: number | null; serials: string[] | null } | null;
 };
@@ -633,6 +654,8 @@ export type ProductForm = {
   variants: VariantForm[];
   /** The unit register exists (25 applied) — the serial boxes are shown and saved. */
   serialsSupported: boolean;
+  /** The availability columns exist (50 applied) — the "How it's sold" fields are shown and saved. */
+  availabilitySupported: boolean;
   /** Read-only (derived by the database). */
   price: number | null;
   compareAtPrice: number | null;
@@ -660,8 +683,18 @@ export function emptyVariant(key: string, name = ""): VariantForm {
     threshold: DEFAULT_THRESHOLD,
     serials: [],
     soldSerials: [],
+    availability: "stock",
+    waitMin: null,
+    waitMax: null,
+    availableOn: "",
+    availabilityLoaded: "",
     loaded: null,
   };
+}
+
+/** The four availability values of a variant as one string (what changed since it loaded). */
+export function availabilityKey(v: Pick<VariantForm, "availability" | "waitMin" | "waitMax" | "availableOn">): string {
+  return JSON.stringify([v.availability, v.waitMin, v.waitMax, v.availableOn || null]);
 }
 
 export function emptyProductForm(variantKey: string): ProductForm {
@@ -693,6 +726,7 @@ export function emptyProductForm(variantKey: string): ProductForm {
     seoDescription: "",
     variants: [emptyVariant(variantKey, "Standard")],
     serialsSupported: true,
+    availabilitySupported: true,
     price: null,
     compareAtPrice: null,
     variantCount: 0,
@@ -733,12 +767,24 @@ function variantFromRow(row: Row, stock: Row | undefined, units: VariantUnits | 
     threshold,
     serials: units ? [...units.inStock] : [],
     soldSerials: units ? [...units.sold] : [],
+    ...withAvailability(row),
     loaded: { cost, track: tracked, stock: level, threshold: tracked ? threshold : null, serials: units ? [...units.inStock] : null },
   };
 }
 
-/** `units` = the product's rows of 25's register, or null when the register doesn't exist yet. */
-export function productFormFromRows(product: Row, variants: Row[], stock: Row[], units: Row[] | null = null): ProductForm {
+/** A variant row's availability columns (50) as form fields; a row without them reads as "stock". */
+function withAvailability(row: Row): Pick<VariantForm, "availability" | "waitMin" | "waitMax" | "availableOn" | "availabilityLoaded"> {
+  const a = variantAvailabilityFromRow(row);
+  const fields = { availability: a.mode, waitMin: a.waitMinDays, waitMax: a.waitMaxDays, availableOn: a.availableOn ?? "" };
+  return { ...fields, availabilityLoaded: availabilityKey(fields) };
+}
+
+/**
+ * `units` = the product's rows of 25's register, or null when the register doesn't exist yet;
+ * `availability` = the variants' availability columns (50), or null before 50 is applied.
+ */
+export function productFormFromRows(product: Row, variants: Row[], stock: Row[], units: Row[] | null = null, availability: Row[] | null = null): ProductForm {
+  const availabilityById = new Map<number, Row>((availability ?? []).map((row) => [toNumber(row.id, 0), row]));
   const attributes = plainObject(product.attributes);
   const stockByVariant = new Map<number, Row>(stock.map((row) => [toNumber(row.variant_id, 0), row]));
   const unitsByVariant = new Map<number, VariantUnits>();
@@ -777,9 +823,14 @@ export function productFormFromRows(product: Row, variants: Row[], stock: Row[],
     seoTitle: toText(product.seo_title, 120) ?? "",
     seoDescription: toText(product.seo_description, 320) ?? "",
     variants: variants.map((row) =>
-      variantFromRow(row, stockByVariant.get(toNumber(row.id, 0)), units === null ? null : (unitsByVariant.get(toNumber(row.id, 0)) ?? { inStock: [], sold: [] })),
+      variantFromRow(
+        { ...row, ...(availabilityById.get(toNumber(row.id, 0)) ?? {}) },
+        stockByVariant.get(toNumber(row.id, 0)),
+        units === null ? null : (unitsByVariant.get(toNumber(row.id, 0)) ?? { inStock: [], sold: [] }),
+      ),
     ),
     serialsSupported: units !== null,
+    availabilitySupported: availability !== null,
     price: toNullableNumber(product.price),
     compareAtPrice: toNullableNumber(product.compare_at_price),
     variantCount: toNumber(product.variant_count, 0),
@@ -799,12 +850,16 @@ export async function fetchProductForEdit(supabase: SupabaseClient, id: number, 
   }
   let unitQuery = supabase.from("product_units").select("variant_id, serial_number, status").eq("product_id", id).order("id").range(0, 4999);
   if (signal) unitQuery = unitQuery.abortSignal(signal);
-  const [product, variants, stock, units] = await Promise.all([productQuery.maybeSingle(), variantQuery, stockQuery, unitQuery]);
+  // 50's columns, read on their own so a database without them still loads the product.
+  let availabilityQuery = supabase.from("product_variants").select("id, availability, wait_min_days, wait_max_days, available_on").eq("product_id", id).range(0, 199);
+  if (signal) availabilityQuery = availabilityQuery.abortSignal(signal);
+  const [product, variants, stock, units, availability] = await Promise.all([productQuery.maybeSingle(), variantQuery, stockQuery, unitQuery, availabilityQuery]);
   const row = unwrapRow<Row>(product, CATALOGUE_MIGRATION);
   if (!row) return null;
   // The register (25) is optional: before it is applied the editor simply has no serial boxes.
   const unitRows = units.error && isSchemaMismatch(units.error) ? null : unwrapRows<Row>(units, SERIALS_MIGRATION);
-  return productFormFromRows(row, unwrapRows<Row>(variants, CATALOGUE_MIGRATION), unwrapRows<Row>(stock, INVENTORY_MIGRATION), unitRows);
+  const availabilityRows = availability.error && isSchemaMismatch(availability.error) ? null : unwrapRows<Row>(availability, AVAILABILITY_MIGRATION);
+  return productFormFromRows(row, unwrapRows<Row>(variants, CATALOGUE_MIGRATION), unwrapRows<Row>(stock, INVENTORY_MIGRATION), unitRows, availabilityRows);
 }
 
 /** A variant's serials as saved: trimmed, blanks dropped, entry order kept. */
@@ -835,7 +890,7 @@ export function buildSerialSave(form: ProductForm, savedVariantIds: readonly num
 export type ProductErrors = {
   fields: Partial<Record<"name" | "slug" | "brand" | "subtitle" | "description" | "seoTitle" | "seoDescription" | "warrantyMonths" | "sortOrder" | "variants", string>>;
   /** keyed by VariantForm.key, then field */
-  variants: Record<string, Partial<Record<"name" | "sku" | "price" | "compareAtPrice" | "cost" | "stock" | "threshold" | "options" | "serials", string>>>;
+  variants: Record<string, Partial<Record<"name" | "sku" | "price" | "compareAtPrice" | "cost" | "stock" | "threshold" | "options" | "serials" | "availability", string>>>;
   count: number;
 };
 
@@ -908,6 +963,12 @@ export function validateProductForm(form: ProductForm): ProductErrors {
       optionNames.add(n.toLowerCase());
     }
     if (v.options.filter((pair) => trimmed(pair.name) || trimmed(pair.value)).length > MAX_OPTIONS) e.options = `Up to ${MAX_OPTIONS} options.`;
+    if (form.availabilitySupported && (v.availability === "order" || v.availability === "preorder")) {
+      const bad = (n: number | null) => n !== null && (!Number.isInteger(n) || n < 0 || n > 365);
+      if (bad(v.waitMin) || bad(v.waitMax) || v.waitMax === 0) e.availability = "Days are whole numbers from 0 to 365 (the longest wait at least 1).";
+      else if (v.waitMin !== null && v.waitMax !== null && v.waitMin > v.waitMax) e.availability = "The shortest wait can't be longer than the longest.";
+      else if (v.availableOn && !/^\d{4}-\d{2}-\d{2}$/.test(v.availableOn)) e.availability = "Pick the expected date.";
+    }
     if (Object.keys(e).length) variants[v.key] = e;
   }
   const count = Object.keys(fields).length + Object.values(variants).reduce((n, e) => n + Object.keys(e).length, 0);
@@ -1028,7 +1089,34 @@ export type ProductSaveResult = {
 /** A stable fingerprint of what would be saved — "unsaved changes?" without false alarms. */
 export function productFingerprint(form: ProductForm): string {
   const payload = buildProductSave(form);
-  return JSON.stringify([payload.p_product, payload.p_variants, form.variants.map((v) => cleanSerialList(v.serials))]);
+  return JSON.stringify([payload.p_product, payload.p_variants, form.variants.map((v) => cleanSerialList(v.serials)), form.variants.map(availabilityKey)]);
+}
+
+/**
+ * The availability updates to send right after admin_save_product (50), by the variant ids it
+ * returned (in list order): only variants whose four values changed — or new ones that aren't
+ * "stock". Each is a direct update of product_variants (admins / staff with Products → edit).
+ */
+export function buildAvailabilitySave(form: ProductForm, savedVariantIds: readonly number[]): { id: number; patch: Row }[] {
+  if (!form.availabilitySupported) return [];
+  const out: { id: number; patch: Row }[] = [];
+  form.variants.forEach((v, index) => {
+    const id = v.id ?? savedVariantIds[index];
+    if (!id) return;
+    const key = availabilityKey(v);
+    if (key === v.availabilityLoaded || (!v.id && v.availability === "stock" && v.waitMin === null && v.waitMax === null && !v.availableOn)) return;
+    const waits = v.availability === "order" || v.availability === "preorder";
+    out.push({
+      id,
+      patch: {
+        availability: v.availability,
+        wait_min_days: waits ? v.waitMin : null,
+        wait_max_days: waits ? v.waitMax : null,
+        available_on: v.availability === "preorder" && v.availableOn ? v.availableOn : null,
+      },
+    });
+  });
+  return out;
 }
 
 // ── Categories ────────────────────────────────────────────────────────────────

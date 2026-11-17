@@ -62,7 +62,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const pathname = collectionHref(collection.id);
   const [back, front] = collection.featureProducts;
   // The sort menu is shared with /shop; on a collection page it only carries the sort (page resets).
-  const sortQuery: ShopQuery = { q: null, category: null, filter: null, brands: [], min: null, max: null, inStock: false, sort, page };
+  const sortQuery: ShopQuery = { q: null, category: null, filter: null, brands: [], min: null, max: null, inStock: false, specs: {}, sort, page };
 
   return (
     <main id="main" className="shell pt-8 pb-24 lg:pt-12">

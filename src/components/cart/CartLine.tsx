@@ -24,6 +24,8 @@ type Props = {
 /** Stock level the stepper may reach: the known level when the quote reports one, else MAX_QTY. */
 function maxFor(quoteLine: QuoteLine | null | undefined): number {
   if (!quoteLine) return MAX_QTY;
+  // 50: an "order" / "pre-order" option may be bought beyond the shelf (the rest is ordered in).
+  if (quoteLine.availability === "order" || quoteLine.availability === "preorder") return MAX_QTY;
   if ((quoteLine.reason === "insufficient_stock" || quoteLine.stock === "low") && quoteLine.stockLevel !== null && quoteLine.stockLevel > 0) {
     return Math.min(MAX_QTY, quoteLine.stockLevel);
   }

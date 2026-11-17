@@ -12,7 +12,7 @@ export const SHARE_IMAGE = {
   width: 1200,
   height: 630,
   type: "image/jpeg",
-  alt: "Dock One Solutions — laptops, storage, keyboards and mice in Sri Lanka",
+  alt: "Dock One Solutions — tech store and IT solutions in Sri Lanka",
 } as const;
 
 type OgImages = NonNullable<NonNullable<Metadata["openGraph"]>["images"]>;

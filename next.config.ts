@@ -49,7 +49,8 @@ export default function config(phase: string): NextConfig {
     // Next's bootstrap and inline JSON-LD need 'unsafe-inline'; React needs eval only in development.
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob:${supabaseHttp ? ` ${supabaseHttp}` : ""}`,
+    // Instagram's picture hosts: the homepage's "Follow us on Instagram" strip (55_instagram_feed).
+    `img-src 'self' data: blob:${supabaseHttp ? ` ${supabaseHttp}` : ""} https://*.cdninstagram.com https://*.fbcdn.net`,
     "font-src 'self' data:",
     `connect-src 'self'${supabaseHttp ? ` ${supabaseHttp} ${supabaseWs}` : ""}`,
     "manifest-src 'self'",

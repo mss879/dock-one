@@ -8,6 +8,8 @@ import { customerName, normalizeAdminOrder, ORDERS_MIGRATION, type AdminOrder } 
 import { getAdminTab } from "@/components/admin/registry";
 import { InventoryValueReport } from "@/components/admin/reports/InventoryValueReport";
 import { SalesReport } from "@/components/admin/reports/SalesReport";
+import { StaffCommissionReport } from "@/components/admin/reports/StaffCommissionReport";
+import { useAdminAccess } from "@/components/admin/access";
 import { StockMovementReport } from "@/components/admin/reports/StockMovementReport";
 import {
   ExportTooLargeError,
@@ -70,8 +72,8 @@ function clampRange(value: DateRangeValue): { range: DateRangeValue; clamped: bo
   return { range: { ...value, from: addDays(value.to, -(MAX_REPORT_DAYS - 1)) }, clamped: true };
 }
 
-type ReportKind = "sales" | "invoiced-sales" | "inventory-value" | "stock-movement";
-const REPORT_KINDS: readonly ReportKind[] = ["sales", "invoiced-sales", "inventory-value", "stock-movement"];
+type ReportKind = "sales" | "invoiced-sales" | "inventory-value" | "stock-movement" | "staff-commission";
+const REPORT_KINDS: readonly ReportKind[] = ["sales", "invoiced-sales", "inventory-value", "stock-movement", "staff-commission"];
 
 /**
  * Three reports under one tab (deep link: /admin?tab=reports&report=inventory-value|stock-movement):
@@ -80,7 +82,10 @@ const REPORT_KINDS: readonly ReportKind[] = ["sales", "invoiced-sales", "invento
 export default function ReportsTab() {
   const tab = getAdminTab("reports");
   const param = useAdminParam("report");
-  const kind: ReportKind = REPORT_KINDS.includes(param as ReportKind) ? (param as ReportKind) : "sales";
+  const access = useAdminAccess();
+  // Staff commission is the owner's only (53_invoice_extras).
+  const asked: ReportKind = REPORT_KINDS.includes(param as ReportKind) ? (param as ReportKind) : "sales";
+  const kind: ReportKind = asked === "staff-commission" && !access.isAdmin ? "sales" : asked;
   return (
     <>
       <TabHeader eyebrow={tab.group} title={tab.label} description={tab.summary} />
@@ -93,9 +98,12 @@ export default function ReportsTab() {
           { key: "invoiced-sales", label: "Invoiced sales" },
           { key: "inventory-value", label: "Inventory value" },
           { key: "stock-movement", label: "Stock movement" },
+          ...(access.isAdmin ? [{ key: "staff-commission" as const, label: "Staff commission" }] : []),
         ]}
       >
-        {kind === "inventory-value" ? (
+        {kind === "staff-commission" ? (
+          <StaffCommissionReport />
+        ) : kind === "inventory-value" ? (
           <InventoryValueReport />
         ) : kind === "stock-movement" ? (
           <StockMovementReport />

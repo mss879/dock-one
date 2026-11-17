@@ -304,6 +304,9 @@ export type InvoiceSettings = {
   receiptPrefix: string;
   receiptDigits: number;
   receiptNextNumber: number;
+  /** 53: new documents print the two signature lines; signatureSupported = 53's columns exist. */
+  defaultShowSignatureLines: boolean;
+  signatureSupported: boolean;
   updatedAt: string | null;
 };
 
@@ -349,6 +352,8 @@ export function normalizeInvoiceSettings(row: Row | null | undefined): InvoiceSe
     receiptPrefix: typeof r.receipt_prefix === "string" ? r.receipt_prefix : "RCT-",
     receiptDigits: Math.min(10, Math.max(1, num(r.receipt_digits, 5))),
     receiptNextNumber: Math.max(1, num(r.receipt_next_number, 1)),
+    defaultShowSignatureLines: r.default_show_signature_lines === true,
+    signatureSupported: "default_show_signature_lines" in r,
     updatedAt: strOrNull(r.updated_at),
   };
 }
@@ -378,7 +383,14 @@ export type InvoiceLine = {
   unitPrice: number | null;
   /** Units this line took from stock (issued invoices). */
   stockTaken: number;
+  /** Client only: the price before the line was made free (complimentary) — to charge it again. */
+  chargePrice?: number | null;
 };
+
+/** A complimentary line (Website changes, November 2026 — "Laptop freebies"): an item given at Rs. 0, printed FREE. */
+export function isFreeLine(line: Pick<InvoiceLine, "unitPrice" | "description">): boolean {
+  return line.unitPrice === 0 && line.description.trim() !== "";
+}
 
 export type InvoiceForm = {
   id: number | null;
@@ -425,7 +437,16 @@ export type InvoiceForm = {
   upfrontMethod: PaymentMethod;
   /** Credit only: days to pay the balance (1–365); the due date = invoice date + days. */
   creditDays: number | null;
+  /** 53: print "Received in Good Order & Condition" and "Authorised Signature" lines. */
+  showSignatureLines: boolean;
+  /** 53, invoices, internal (never printed): added to the sales staff's commission total — the owner's to set. */
+  bonus: number | null;
+  /** 53: who the sale counts for (commission); null = whoever made the invoice. */
+  salesStaffId: string | null;
+  /** 53's columns exist (the save may send them). */
+  extrasSupported: boolean;
   // ── facts the database owns (read-only here) ──
+  createdBy: string | null;
   stockDeducted: boolean;
   amountPaid: number;
   /** The database's totals at the last save/load (the live ones come from computeTotals). */
@@ -523,6 +544,11 @@ export function emptyInvoiceForm(settings: InvoiceSettings | null, today: string
     upfrontAmount: 0,
     upfrontMethod: "cash",
     creditDays: settings?.defaultDueDays != null && settings.defaultDueDays > 0 ? settings.defaultDueDays : 30,
+    showSignatureLines: settings?.defaultShowSignatureLines ?? false,
+    bonus: 0,
+    salesStaffId: null,
+    extrasSupported: settings?.signatureSupported ?? false,
+    createdBy: null,
     stockDeducted: false,
     amountPaid: 0,
     savedTotal: 0,
@@ -624,6 +650,11 @@ export function formFromRows(invoice: Row, items: Row[]): InvoiceForm {
     upfrontAmount: num(invoice.upfront_amount, 0),
     upfrontMethod: normalizeMethod(invoice.upfront_method),
     creditDays: invoice.credit_days == null ? null : num(invoice.credit_days),
+    showSignatureLines: invoice.show_signature_lines === true,
+    bonus: num(invoice.bonus, 0),
+    salesStaffId: strOrNull(invoice.sales_staff_id),
+    extrasSupported: "show_signature_lines" in invoice,
+    createdBy: strOrNull(invoice.created_by),
     stockDeducted: invoice.stock_deducted === true,
     amountPaid: num(invoice.amount_paid, 0),
     savedTotal: num(invoice.total, 0),
@@ -654,6 +685,7 @@ export function invoiceFingerprint(form: InvoiceForm): string {
     form.deductStock, form.internalNote,
     form.saleType, form.saleType === "credit" ? [form.upfrontAmount, form.upfrontMethod, form.creditDays] : null,
     form.lines.map((l) => [l.id, l.productId, l.variantId, l.description, cleanSerials(l.serialNumbers), l.warranty, l.quantity, l.unitPrice]),
+    form.showSignatureLines, form.bonus, form.salesStaffId,
   ]);
 }
 
@@ -717,13 +749,32 @@ export function buildInvoiceSave(form: InvoiceForm): { p_invoice: Record<string,
   return { p_invoice: invoice, p_items: items };
 }
 
-/** p_doc for admin_save_document (40): the document type and the quotation fields. */
-export function buildDocSave(form: InvoiceForm): Record<string, unknown> {
+/**
+ * p_doc for admin_save_document (40): the document type and the quotation fields; once 53 is
+ * applied, the signature lines — and, for the owner on an invoice, the bonus and sales staff.
+ */
+export function buildDocSave(form: InvoiceForm, options: { owner?: boolean } = {}): Record<string, unknown> {
   return {
     doc_type: form.docType,
     bill_to_company: nullIfBlank(form.billToCompany),
     ...(form.docType === "quotation" ? { valid_until: form.validUntil || null } : {}),
+    ...(form.extrasSupported ? { show_signature_lines: form.showSignatureLines } : {}),
+    ...(form.extrasSupported && options.owner && form.docType === "invoice" ? { bonus: form.bonus ?? 0, sales_staff_id: form.salesStaffId } : {}),
   };
+}
+
+/** The owner's and staff names (53 · admin_staff_names) — for "Sales staff". */
+export type StaffName = { userId: string; name: string; role: "owner" | "staff"; isActive: boolean };
+
+export async function fetchStaffNames(supabase: SupabaseClient, signal: AbortSignal): Promise<StaffName[] | null> {
+  const { data, error } = await supabase.rpc("admin_staff_names").abortSignal(signal);
+  if (error) return null; // 53 not applied, or no access: the field simply shows less
+  return (Array.isArray(data) ? (data as Row[]) : []).map((r) => ({
+    userId: str(r.user_id),
+    name: str(r.name) || "Unnamed",
+    role: r.role === "owner" ? "owner" : "staff",
+    isActive: r.is_active !== false,
+  }));
 }
 
 /**
@@ -1248,6 +1299,7 @@ export function duplicateForm(source: InvoiceForm, settings: InvoiceSettings | n
     paymentTerms: source.paymentTerms,
     notes: [...source.notes],
     showBankDetails: source.showBankDetails,
+    showSignatureLines: source.showSignatureLines,
     discountType: source.discountType,
     discountValue: source.discountValue,
     taxType: source.taxType,

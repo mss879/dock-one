@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Link2, ListPlus, PackageCheck, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Gift, Link2, ListPlus, PackageCheck, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 import { Thumb } from "@/components/admin/catalogue/shared";
 import { SerialInputs, type SerialHint } from "@/components/admin/serials/SerialInputs";
@@ -9,6 +9,7 @@ import {
   cleanSerials,
   emptyLine,
   formatRs,
+  isFreeLine,
   lineFromHit,
   serialSlots,
   serialState,
@@ -221,6 +222,34 @@ export function LineItems({ lines, onChange, amounts, locked, readOnly, deductSt
                       </div>
                     </div>
                     {(e.quantity || e.unitPrice) && <FieldError>{[e.quantity && `Quantity: ${e.quantity}`, e.unitPrice && `Price: ${e.unitPrice}`].filter(Boolean).join(" ")}</FieldError>}
+                    {/* Complimentary items ("laptop freebies"): a line at Rs. 0, printed FREE; it still takes its item out of stock. */}
+                    {(editable || isFreeLine(line)) && line.description.trim() !== "" && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {isFreeLine(line) ? (
+                          <>
+                            <StatusBadge tone="success">
+                              <Gift aria-hidden className="mr-1 inline size-3" />
+                              Free — complimentary
+                            </StatusBadge>
+                            {editable && line.chargePrice != null && line.chargePrice > 0 && (
+                              <button type="button" className="font-mono text-[10.5px] font-semibold tracking-[0.06em] text-adm-accent-ink uppercase hover:underline" onClick={() => update(line.key, { unitPrice: line.chargePrice ?? null, chargePrice: null })}>
+                                Charge {formatRs(line.chargePrice)} again
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-adm-accent-ink uppercase hover:underline"
+                            onClick={() => update(line.key, { unitPrice: 0, chargePrice: line.unitPrice })}
+                            title="Give this item free with the sale — printed FREE, still taken out of stock"
+                          >
+                            <Gift aria-hidden className="size-3" />
+                            Make it free
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {showSerials && (
                       <div>

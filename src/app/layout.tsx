@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jet
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: { default: `${site.name} — Laptops, storage, keyboards & mice in Sri Lanka`, template: `%s — ${site.name}` },
+  title: { default: `${site.name} — Tech store & IT solutions in Sri Lanka`, template: `%s — ${site.name}` },
   description: site.description,
   applicationName: site.name,
   // og:image is the file convention src/app/opengraph-image.jpg (see components/seo/share-image.ts).

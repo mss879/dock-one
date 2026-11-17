@@ -5,6 +5,7 @@ import { ContentBlocksPanel } from "@/components/admin/homepage/ContentBlocksPan
 import { FeaturedCollectionsPanel } from "@/components/admin/homepage/FeaturedCollectionsPanel";
 import { FlashSalePanel } from "@/components/admin/homepage/FlashSalePanel";
 import { HeroSlidesPanel } from "@/components/admin/homepage/HeroSlidesPanel";
+import { InstagramPanel } from "@/components/admin/homepage/InstagramPanel";
 import { NavbarPanel } from "@/components/admin/homepage/NavbarPanel";
 import { NewArrivalsPanel } from "@/components/admin/homepage/NewArrivalsPanel";
 import { PromoTilesPanel } from "@/components/admin/homepage/PromoTilesPanel";
@@ -21,7 +22,7 @@ import { setAdminParams, useAdminParam } from "@/lib/admin/url";
  * refreshed. Deep link: /admin?tab=homepage&section=hero|tiles|collections|flash|new|blocks|navbar.
  */
 
-const SECTIONS = ["hero", "tiles", "collections", "flash", "new", "blocks", "navbar"] as const;
+const SECTIONS = ["hero", "tiles", "collections", "flash", "new", "blocks", "instagram", "navbar"] as const;
 type Section = (typeof SECTIONS)[number];
 
 function isSection(value: string | null): value is Section {
@@ -57,6 +58,7 @@ export default function HomepageTab() {
           { key: "flash", label: "Flash sale" },
           { key: "new", label: "New arrivals" },
           { key: "blocks", label: "Content blocks" },
+          { key: "instagram", label: "Instagram" },
           { key: "navbar", label: "Navbar" },
         ]}
       >
@@ -66,6 +68,7 @@ export default function HomepageTab() {
         {section === "flash" && <FlashSalePanel />}
         {section === "new" && <NewArrivalsPanel />}
         {section === "blocks" && <ContentBlocksPanel ctx={ctx} />}
+        {section === "instagram" && <InstagramPanel />}
         {section === "navbar" && <NavbarPanel />}
       </Tabs>
     </>

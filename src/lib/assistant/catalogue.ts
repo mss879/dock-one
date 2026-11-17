@@ -1,4 +1,5 @@
 import "server-only";
+import { variantAvailability, type VariantAvailability } from "@/lib/availability";
 import {
   PRODUCT_DETAIL_FIELDS,
   normalizeProductDetail,
@@ -44,7 +45,7 @@ const MIGRATION = "04_catalogue.sql";
 const MAX_PRODUCTS = 2000;
 const PAGE = 1000;
 
-export type SnapshotVariant = { id: number; name: string; price: number; compareAtPrice: number | null };
+export type SnapshotVariant = { id: number; name: string; price: number; compareAtPrice: number | null; availability: VariantAvailability };
 
 export type SnapshotProduct = {
   id: number;
@@ -111,7 +112,7 @@ function toSnapshotProduct(detail: ProductDetail, categoryNames: ReadonlyMap<str
   if (!detail.categoryId || detail.variants.length === 0 || detail.defaultVariantId === null) return null;
   const specRows = formatSpecs(detail.attributes.specs);
   const categoryName = detail.categoryName ?? categoryNames.get(detail.categoryId) ?? null;
-  const variants = detail.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, compareAtPrice: v.compareAtPrice }));
+  const variants = detail.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, compareAtPrice: v.compareAtPrice, availability: v.availability }));
   const titleText = [detail.name, detail.brand, detail.subtitle ?? ""].join(" ").toLowerCase();
   const searchText = [
     titleText,
@@ -287,16 +288,28 @@ export function getAssistantCatalogue(): Promise<AssistantSnapshot> {
 // ── Stock bands (live rows → what cards and the model may see) ────────────────
 
 /**
- * Bands for every active variant of a product from get_product_availability rows. A variant
- * with no row is untracked — it always sells ("in"). The exact level is kept only when LOW.
+ * Bands for every active variant of a product from get_product_availability rows and how the
+ * variant is sold (50): in stock / low (how many left) / out, or "order" (available to order) /
+ * "preorder", with the wait. A variant with no row is untracked. Same rules as the website
+ * (lib/availability), so the assistant never says "out of stock" for something that can be ordered.
  */
 export function stockBands(product: SnapshotProduct, rows: readonly AvailabilityRow[]): AssistantStockBand[] {
   return product.variants.map((variant) => {
     const row = rows.find((r) => r.productId === product.id && r.variantId === variant.id);
-    if (!row) return { variant: variant.name, state: "in" as const };
-    if (row.stockLevel <= 0) return { variant: variant.name, state: "out" as const };
-    if (row.low) return { variant: variant.name, state: "low" as const, left: row.stockLevel };
-    return { variant: variant.name, state: "in" as const };
+    const view = variantAvailability(variant.availability, row ? { level: row.stockLevel, low: row.low } : null);
+    const wait = view.wait ?? undefined;
+    switch (view.status) {
+      case "out_of_stock":
+        return { variant: variant.name, state: "out" as const };
+      case "to_order":
+        return { variant: variant.name, state: "order" as const, wait };
+      case "preorder":
+        return { variant: variant.name, state: "preorder" as const, wait };
+      case "low_stock":
+        return { variant: variant.name, state: "low" as const, left: row?.stockLevel };
+      default:
+        return { variant: variant.name, state: "in" as const };
+    }
   });
 }
 

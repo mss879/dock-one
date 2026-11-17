@@ -8,6 +8,12 @@ For the shop team: **`docs/Dock-One-New-Features-Guide.pdf`** is a plain-languag
 October 2026 additions (staff accounts, quotations, receipts, reports, suppliers, warranty, website
 quotation requests) and how to use them in the admin.
 
+**November 2026 changes (items 1–3 of the client's list, migrations 50–55):** `docs/client/` holds
+the three documents for the client — **`Dock-One-November-Changes-Client-Questions.pdf`** (everything
+the client must provide, decide or confirm, with the receipt sample), **`Dock-One-SEO-Images-Settings-Guide.pdf`**
+(product SEO with an example, image rules, where delivery / returns are set, invoice freebies) and
+**`Dock-One-Receipt-Sample.pdf`** (the client's A4 receipt template, filled in). Setup guides: `docs/WHATSAPP_SETUP.md`, `docs/INSTAGRAM_SETUP.md`.
+
 ## 1. What the site does
 
 **Storefront**
@@ -58,6 +64,23 @@ name or by scanning a unit's serial number; one serial box per unit; gapless num
 stock taken on issue; payments, overdue tracking, print / save as PDF; "Create invoice" from an order) ·
 **Serial numbers** (one box per unit in stock in Products; picked per line when packing a web order;
 printed on the packing slip and invoices).
+
+**November 2026 (50–55):**
+
+| Feature | Where |
+| --- | --- |
+| Availability per variant — In stock / Available to order (with a wait) / Pre-order (expected date) / Out of stock — on cards, product pages, the basket and the AI assistant; ordering beyond stock (the shelf units are reserved, the rest wait as "N to order" and are allocated when stock is recorded) (50) | admin → Products → Variants → Availability; admin → Orders |
+| "Notify me" on out-of-stock products; the requests and one-click "Email them" (50) | product pages; admin → Inventory |
+| Compare up to 5 products, download as PDF or Excel | the compare bar, `/compare` |
+| Spec filters — laptops: RAM, SSD, graphics, screen size, touchscreen, OS, condition; drives: capacity; monitors: refresh rate and screen size (from the products' specifications) | `/shop?category=…` |
+| Homepage: every category ("Top picks by category"), the IT solutions section (52), the Instagram strip (55), new headline / description / share image | `/`; admin → Homepage & navbar → Content blocks / Instagram |
+| "People viewing" counts only live visitors, one per browser (51) | product pages |
+| Invoices: "Make it free" lines (FREE / Complimentary), signature lines, paid invoices final for staff, BONUS and Sales staff (owner), WhatsApp PDF sending (53, 54) | admin → Invoices |
+| Staff commission % and the owner-only Staff commission report (53) | admin → Staff; admin → Reports |
+| Receipts on the client's own A4 receipt template (receipt / invoice no., the customer from the invoice, method and reference, invoice total / amount received / balance due, notes, "Received by" and "Authorised Signature") and an Excel export with each receipt's invoice | admin → Receipts, an invoice → Payments |
+| The client's quotation notes (11) on every new quotation, valid 7 days (56) | admin → Quotations; `/quote` requests |
+| WhatsApp Business: keys pasted in the admin, webhook details, chats inbox with replies and templates, the AI assistant answering on WhatsApp (54) | admin → WhatsApp; `/api/whatsapp/webhook` |
+| SEO: search result preview under the product's SEO fields; Google data says PreOrder / BackOrder for those options | admin → Products; product pages |
 
 ## 2. Set it up (in this order)
 

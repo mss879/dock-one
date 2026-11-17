@@ -307,7 +307,17 @@ export function OrderDrawer({ orderId, settings, onClose, onChanged }: { orderId
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{item.quantity}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {item.quantity}
+                      {item.backorder > 0 && !cancelled && (
+                        <span
+                          className="mt-1 block font-mono text-[10.5px] font-semibold tracking-[0.04em] whitespace-nowrap text-adm-accent-ink uppercase"
+                          title="Ordered beyond the stock on hand. Record the delivery in Inventory → Record movement; the next status change moves it to this order."
+                        >
+                          {item.backorder} to order
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right">
                       <Money amount={item.unitPrice} />
                     </td>
