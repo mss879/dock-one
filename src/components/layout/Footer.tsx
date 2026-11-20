@@ -5,6 +5,7 @@ import { Cross } from "@/components/ui/Cross";
 import { getCategories } from "@/lib/catalogue";
 import { getFooterLinks } from "@/lib/content";
 import { getStoreSettings, SOCIAL_NETWORKS, type SocialNetwork } from "@/lib/settings";
+import { AccessGranted } from "./AccessGranted";
 import { telHref } from "./contact";
 import { CookieSettingsButton } from "./CookieSettingsButton";
 import { Logo } from "./Logo";
@@ -139,16 +140,22 @@ export async function Footer() {
         <div className="shell label flex flex-col items-stretch gap-0 px-0 sm:flex-row sm:items-center sm:px-6 lg:px-8">
           <p className="flex items-center gap-2 px-4 py-3 text-night-mute sm:px-0">
             <span className="size-1.5 bg-lime" /> Connection secure
-            <span className="hidden md:inline">
-              {"//"} © {year} {site.name}. All rights reserved.
-            </span>
           </p>
-          <p aria-hidden className="bg-violet px-5 py-3 font-semibold sm:mx-auto">
-            &gt; Access granted<span className="animate-blink">_</span>
-          </p>
+          <AccessGranted />
           <p aria-hidden className="hidden gap-5 py-3 text-night-mute lg:flex">
             <span>Scn: 0007</span>
             <span>Node: CMB_01</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Copyright. The row is taller than the floating "Ask the tech desk" launcher (AssistantWidget: 56px
+          at 16px / 24px from the bottom) and the text stops short of it, so at the bottom of the page the
+          launcher sits here instead of over the status bar's credit link. */}
+      <div className="border-t border-night-line">
+        <div className="shell min-h-20 pt-5 sm:min-h-22">
+          <p className="label max-w-[calc(100%-5rem)] text-night-mute sm:max-w-[calc(100%-15rem)]">
+            © {year} {site.name}. All rights reserved.
           </p>
         </div>
       </div>

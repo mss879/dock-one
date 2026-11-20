@@ -125,6 +125,18 @@ then the screen splits open along a lime seam. It is server-rendered so it cover
 the hero downloads underneath; the exit waits for the first hero image (capped at 4 s) and the hero
 autoplay is paused until the reveal.
 
+**Footer status chip — "Access granted"** (`src/components/layout/AccessGranted.tsx`): the white
+(`surface`) chip in the footer's status bar — `> ACCESS GRANTED_` beside the credit of the agency that
+built the site: "DESIGNED BY", the Arc AI logo (`public/brand/arc-ai-logo.webp`, trimmed from the
+agency's artwork by `scripts/images/arc-ai-logo.py`) and ↗, a followed link to https://www.arcai.agency
+(new tab; `rel="noopener"` only — no nofollow, and the referrer is kept). Every 8 s the HUD half types
+itself out (a white shutter carrying the cursor steps right one character at a time), then a violet scan
+line sweeps the credit and the logo glitches violet/lime as it passes (`globals.css`). The credit never
+hides: at rest and under reduced motion the chip reads in full. The logo is the one place another
+brand's colours appear on the site. The copyright line sits on its own row under the status bar; that
+row is taller than the floating "Ask the tech desk" launcher, so at the bottom of the page the launcher
+rests there instead of over the credit.
+
 ## 8. Imagery
 
 Generated with Higgsfield (`z_image`, 0.15 credits each) via `scripts/images/`. Art direction: graphite /

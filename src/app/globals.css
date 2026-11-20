@@ -420,6 +420,90 @@
 }
 
 /*
+ * Footer status chip (AccessGranted.tsx), one 8 s loop. 0–14%: "ACCESS GRANTED" types itself out — a
+ * white shutter carrying the cursor steps right one character (1ch + the label's 0.08em tracking) at
+ * a time, 14 steps. 14–22%: a violet scan line sweeps the "Designed by" credit; the Arc AI logo
+ * glitches (violet/lime split, jitter) as it passes. Every resting state is the finished chip, so
+ * reduced motion — and anything that never runs the animation — shows it in full.
+ */
+@keyframes access-type {
+  0% {
+    transform: translateX(0);
+    animation-timing-function: steps(14, end);
+  }
+  14%,
+  100% {
+    transform: translateX(calc(14 * (1ch + 0.08em)));
+  }
+}
+@keyframes access-scan {
+  0%,
+  14% {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  14.4%,
+  21.6% {
+    opacity: 1;
+  }
+  22%,
+  100% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+@keyframes access-glitch {
+  0%,
+  16% {
+    filter: none;
+    transform: none;
+    opacity: 1;
+  }
+  16.5% {
+    filter: drop-shadow(-2px 0 var(--color-violet)) drop-shadow(2px 0 var(--color-lime));
+    transform: translateX(1px);
+  }
+  17% {
+    filter: drop-shadow(2px 0 var(--color-violet)) drop-shadow(-2px 0 var(--color-lime));
+    transform: translateX(-2px) skewX(-8deg);
+  }
+  17.5% {
+    filter: none;
+    transform: translateX(1px);
+    opacity: 0.55;
+  }
+  18% {
+    filter: drop-shadow(-1px 0 var(--color-violet));
+    transform: none;
+    opacity: 1;
+  }
+  18.5%,
+  100% {
+    filter: none;
+    transform: none;
+    opacity: 1;
+  }
+}
+.access-shutter {
+  transform: translateX(calc(14 * (1ch + 0.08em)));
+  animation: access-type 8s infinite;
+}
+.access-scan {
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(109 59 255 / 0.08) 70%,
+    rgb(109 59 255 / 0.3) calc(100% - 2px),
+    var(--color-violet) calc(100% - 2px)
+  );
+  animation: access-scan 8s linear infinite;
+}
+.access-logo {
+  animation: access-glitch 8s steps(1, end) infinite;
+}
+
+/*
  * ─────────────────────────────────────────────────────────────────────────────
  * Admin theme (BUILD_SPEC §2.11, blueprint §11.3.10). Own tokens, scoped under
  * .admin-root — nothing here touches the storefront. Brand-consistent (ink, violet,
