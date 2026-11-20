@@ -8,9 +8,13 @@ For the shop team: **`docs/Dock-One-New-Features-Guide.pdf`** is a plain-languag
 October 2026 additions (staff accounts, quotations, receipts, reports, suppliers, warranty, website
 quotation requests) and how to use them in the admin.
 
-**November 2026 changes (items 1–3 of the client's list, migrations 50–55):** `docs/client/` holds
-the three documents for the client — **`Dock-One-November-Changes-Client-Questions.pdf`** (everything
-the client must provide, decide or confirm, with the receipt sample), **`Dock-One-SEO-Images-Settings-Guide.pdf`**
+**November 2026 changes (items 1–3 of the client's list, migrations 50–56):** `docs/client/` holds
+the documents for the client — **`Dock-One-Whats-New-10-17-Nov-2026.pdf`** (one sheet: every change
+from 10–17 November and where to find it, with the Instagram setting at the top),
+**`Dock-One-November-Features-Guide.pdf`** (each request from the
+client's list, how it now works and where it is managed in the admin, with screenshots),
+**`Dock-One-November-Changes-Client-Questions.pdf`** (everything the client must provide, decide or
+confirm, with the receipt sample), **`Dock-One-SEO-Images-Settings-Guide.pdf`**
 (product SEO with an example, image rules, where delivery / returns are set, invoice freebies) and
 **`Dock-One-Receipt-Sample.pdf`** (the client's A4 receipt template, filled in). Setup guides: `docs/WHATSAPP_SETUP.md`, `docs/INSTAGRAM_SETUP.md`.
 
